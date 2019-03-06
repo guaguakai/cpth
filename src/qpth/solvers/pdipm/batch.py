@@ -5,7 +5,7 @@ from enum import Enum
 from qpth.util import get_sizes, bdiag
 
 
-shown_btrifact_warning = False
+shown_btrifact_warning = True
 
 
 def btrifact_hack(x):
@@ -426,7 +426,6 @@ a non-zero diagonal.
         R -= G_invQ_AT.bmm(T)
     else:
         S_LU_data = torch.zeros(nBatch, nineq, nineq).type_as(Q)
-
     S_LU = [S_LU_data, S_LU_pivots]
     return Q_LU, S_LU, R
 
