@@ -31,18 +31,20 @@ class DualFunction(Function):
     def __init__(self, model, x_size, theta_size, m_size):
         self.x_size = x_size
         self.theta_size = theta_size
-        self.edge_size = 400
-        self.Q = 0.5 * np.eye(self.x_size)
-        self.P = 0.2 * np.eye(self.theta_size)
+        self.edge_size = 100
+        self.Q = 1.0 * np.eye(self.x_size)
+        self.P = 0.1 * np.eye(self.theta_size)
         self.m_size = m_size
         self.model = model
+        # self.method = "SLSQP"
         self.method = "Newton-CG"
+        self.tol = 1e-3
+        self.M = 1e3
+        self.theta_bounds = [(-self.M,self.M)] * self.theta_size
 
     def m(self, theta, theta_bar, lib=np): # numpy inputs
-        if lib == np:
-            return theta - theta_bar
-        elif lib == torch:
-            return theta - theta_bar
+        return (theta - theta_bar) ** 2 
+        # return (theta - theta_bar) ** 2 - 3
 
     def f(self, x, theta, lib=np): # default numpy inputs
         if lib == torch:
@@ -70,11 +72,15 @@ class DualFunction(Function):
             # we might need to transform everything back to numpy and finish computing the scipy part
             # then transform all of them back to torch in order to do the back propagation
             def lagrangian(theta):
-                return -self.f(x, theta) + np.dot(self.m(theta, theta_bar), lamb)
+                L = -self.f(x, theta) + np.dot(self.m(theta, theta_bar), lamb)
+                return L
 
             lagrangian_jac = autograd.grad(lagrangian)
             lagrangian_hessian = autograd.jacobian(lagrangian_jac)
-            res = scipy.optimize.minimize(fun=lagrangian, x0=np.zeros((self.theta_size)), method=self.method, jac=lagrangian_jac, hess=lagrangian_hessian) 
+            def lagrangian_jacp(theta, p):
+                return np.dot(lagrangian_jac(theta), p)
+            lagrangian_hessianp = autograd.grad(lagrangian_jacp)
+            res = scipy.optimize.minimize(fun=lagrangian, x0=theta_bar, method=self.method, jac=lagrangian_jac, hessp=lagrangian_hessianp, tol=self.tol, bounds=self.theta_bounds) 
 
             obj_values[i] = torch.Tensor([res.fun])
             theta_values[i] = torch.Tensor(res.x)
@@ -91,16 +97,52 @@ class DualFunction(Function):
         hess_g = torch.Tensor(*x_lambs.shape, self.x_size + self.m_size)
         for i in range(nBatch):
             # ======================== same as forward path ============================
+            # ------------------------- autograd version -------------------------------
             x = x_lambs[i,:x_size].detach().numpy()
-            lamb = x_lambs[i,x_size:].detach().numpy()
-            theta_bar = theta_bars[i].detach().numpy()
+            lamb = x_lambs[i,x_size:].detach().numpy() 
+            theta_bar = theta_bars[i].detach().numpy() 
 
             def lagrangian(theta):
-                return -self.f(x, theta) + np.dot(self.m(theta, theta_bar), lamb)
+                L = -self.f(x, theta) + np.dot(self.m(theta, theta_bar), lamb)
+                return L
 
             lagrangian_jac = autograd.grad(lagrangian)
             lagrangian_hessian = autograd.jacobian(lagrangian_jac)
-            res = scipy.optimize.minimize(fun=lagrangian, x0=np.zeros((self.theta_size)), method=self.method, jac=lagrangian_jac, hess=lagrangian_hessian) 
+            def lagrangian_jacp(theta, p):
+                return np.dot(lagrangian_jac(theta), p)
+            lagrangian_hessianp = autograd.grad(lagrangian_jacp)
+
+            res = scipy.optimize.minimize(fun=lagrangian, x0=theta_bar, method=self.method, jac=lagrangian_jac, hessp=lagrangian_hessianp, tol=self.tol, bounds=self.theta_bounds) 
+
+            # --------------------------- torch version --------------------------------
+            # x = x_lambs[i,:x_size]
+            # lamb = x_lambs[i,x_size:]
+            # theta_bar = theta_bars[i]
+
+            # def lagrangian(theta):
+            #     theta_var = torch.Tensor(theta)
+            #     L = -self.f(x, theta_var, lib=torch) + torch.dot(self.m(theta_var, theta_bar, lib=torch), lamb)
+            #     return L.detach().numpy()
+
+            # # lagrangian_jac = autograd.grad(lagrangian)
+            # def lagrangian_jac(theta, get_hess=False):
+            #     theta_var = Variable(torch.Tensor(theta), requires_grad=True)
+            #     L = -self.f(x, theta_var, lib=torch) + torch.dot(self.m(theta_var, theta_bar, lib=torch), lamb)
+            #     L_jac = torch.autograd.grad(L, theta_var)[0]
+            #     return L_jac.detach().numpy()
+
+            # # lagrangian_hessian = autograd.jacobian(lagrangian_jac)
+            # def lagrangian_hessian(theta, get_hess=False):
+            #     theta_var = Variable(torch.Tensor(theta), requires_grad=True)
+            #     L_hess = torch.Tensor(theta.size, theta.size)
+            #     L = -self.f(x, theta_var, lib=torch) + torch.dot(self.m(theta_var, theta_bar, lib=torch), lamb)
+            #     L_jac = torch.autograd.grad(L, theta_var, retain_graph=True, create_graph=True)[0]
+            #     for j in range(theta.size):
+            #         L_hess[j] = torch.autograd.grad(L_jac[j], theta_var, retain_graph=True, create_graph=True)[0]
+
+            #     return L_hess.detach().numpy()
+
+            # res = scipy.optimize.minimize(fun=lagrangian, x0=theta_bar.detach().numpy(), method=self.method, jac=lagrangian_jac, hess=lagrangian_hessian) 
 
             # ========================== gradient computing =============================
             theta_torch = Variable(torch.Tensor(res.x), requires_grad=True)
@@ -204,7 +246,7 @@ if __name__ == "__main__":
                         help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--truncated-size', type=int, default=20, metavar='N',
+    parser.add_argument('--truncated-size', type=int, default=10, metavar='N',
                         help='how many nodes in each side of the bipartite graph')
 
     parser.add_argument('--save-model', action='store_true', default=True,
@@ -248,7 +290,7 @@ if __name__ == "__main__":
 
     nBatch = args.batch_size
     print(nBatch)
-    x = 1 * torch.ones((nBatch, x_size)) # TODO wrong dimension
+    x = 1.0 * torch.ones((nBatch, x_size)) # TODO wrong dimension
     lamb = 0.1 * torch.ones((nBatch, lamb_size)) # TODO wrong dimension
 
     for batch_idx, (features, labels) in enumerate(train_loader):
@@ -261,16 +303,18 @@ if __name__ == "__main__":
         break
 
     theta_bar = theta_bars[0:1,:]
+
     def g(x):
-        # print(x)
         x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
-        return -dual_function(x_torch, theta_bar).detach().numpy()[0]
+        value = -dual_function(x_torch, theta_bar).detach().numpy()[0]
+        print(value)
+        return value
+
     def g_jac(x):
         x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
         gradient = -dual_function.get_jac_torch(x_torch, theta_bar).detach().numpy()[0]
-        print(x)
-        print(gradient)
         return gradient
+
     def g_hess(x):
         x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
         gradient, hessian = dual_function.get_jac_torch(x_torch, theta_bar, get_hess=True)
@@ -280,9 +324,10 @@ if __name__ == "__main__":
     P = torch.Tensor(dual_function.P)
     x_opt = - torch.matmul(torch.inverse(Q), theta_bar.view(-1))
     lamb_opt = torch.matmul(torch.eye(lamb_size) + torch.matmul(P, Q), x_opt)
-    xlamb_opt = torch.cat((x_opt, lamb_opt), dim=0).view(1,800).detach().numpy()
+    xlamb_opt = torch.cat((x_opt, lamb_opt), dim=0).view(1,2*edge_size).detach().numpy()
     print("minimizing...")
-    res = scipy.optimize.minimize(fun=g, x0=np.zeros((1,800)), method="SLSQP", jac=g_jac, hess=g_hess, bounds=[(None, None)] * 800)
+    res = scipy.optimize.minimize(fun=g, x0=np.zeros((1,2*edge_size)), method="SLSQP", jac=g_jac, hess=g_hess)
+    print(res)
 
 
     
