@@ -89,6 +89,7 @@ class DualFunction(Function):
     def get_jac_torch(self, x_lambs, theta_bars):
         nBatch = len(x_lambs)
         dg_dxlamb = torch.Tensor(*x_lambs.shape)
+        hess_g = torch.Tensor(*x_lambs.shape, self.x_size + self.m_size)
         for i in range(nBatch):
             # ======================== same as forward path ============================
             x = x_lambs[i,:x_size].detach().numpy()
@@ -104,9 +105,8 @@ class DualFunction(Function):
 
             # ========================== gradient computing =============================
             theta_torch = Variable(torch.Tensor(res.x), requires_grad=True)
-            theta_bar_torch = Variable(torch.Tensor(theta_bar), requires_grad=True)
-            print(theta_torch.shape)
-            x_lamb_torch = Variable(torch.Tensor(x_lambs[i]), requires_grad=True)
+            theta_bar_torch = Variable(theta_bars[i], requires_grad=True)
+            x_lamb_torch = Variable(x_lambs[i], requires_grad=True)
             x_torch = x_lamb_torch[:x_size]
             lamb_torch = x_lamb_torch[x_size:]
 
@@ -136,7 +136,10 @@ class DualFunction(Function):
             dg_dlamb = torch.matmul(df_dtheta, dtheta_dlamb) - m_value - torch.matmul(torch.matmul(lamb_torch, dm_dtheta), dtheta_dlamb)
             dg_dxlamb[i] = torch.cat((dg_dx, dg_dlamb), dim=0)
 
-        return dg_dxlamb
+            for j in range(self.x_size + self.m_size):
+                hess_g[i][j] = torch.autograd.grad(dg_dxlamb[i][j], x_lamb_torch, retain_graph=True, create_graph=True)[0]
+
+        return dg_dxlamb, hess_g
 
     def backward(self, dl_dg):
         x_lambs, thetas, theta_bars, obj_values, theta_jac, theta_hess = self.save_tensors
@@ -176,8 +179,7 @@ class DualFunction(Function):
             dg_dlamb = torch.matmul(df_dtheta, dtheta_dlamb) - m_value - torch.matmul(torch.matmul(lamb_torch, dm_dtheta), dtheta_dlamb)
             dg_dxlamb = torch.cat((dg_dx, dg_dlamb), dim=0)
             dl_dxlamb[i] = torch.matmul(dl_dg, dg_dxlamb)
-            print(dg_dxlamb)
-        
+        return dl_dxlamb, None # TODO
 
 
 if __name__ == "__main__":
@@ -253,6 +255,6 @@ if __name__ == "__main__":
         obj_value = dual_function(x_lamb, theta_bar)
         # obj_value, theta_opt, theta_jac, theta_hessian = obj_function.value(x, lamb, features)
         print(obj_value)
-        jac = dual_function.get_jac_torch(x_lamb, theta_bar)
+        g_jac, g_hess = dual_function.get_jac_torch(x_lamb, theta_bar)
         break
     
