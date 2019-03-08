@@ -36,16 +36,13 @@ class DualFunction(Function):
         self.P = 0.2 * np.eye(self.theta_size)
         self.m_size = m_size
         self.model = model
-        self.method = "SLSQP"
+        self.method = "Newton-CG"
 
     def m(self, theta, theta_bar, lib=np): # numpy inputs
-        print("YOLO")
-        if lib == torch:
-            tmp_theta_bar = torch.Tensor(theta_bar)
-            return theta - tmp_theta_bar.view(self.theta_size)
-        else:
-            tmp_theta_bar = theta_bar
-            return theta - lib.reshape(tmp_theta_bar, (self.theta_size))
+        if lib == np:
+            return theta - theta_bar
+        elif lib == torch:
+            return theta - theta_bar
 
     def f(self, x, theta, lib=np): # default numpy inputs
         if lib == torch:
@@ -57,6 +54,7 @@ class DualFunction(Function):
         return lib.dot(x, theta) + 0.5 * lib.dot(x, lib.matmul(Q, x)) - 0.5 * lib.dot(theta, lib.matmul(P, theta))
 
     def forward(self, x_lambs, theta_bars):
+        assert(x_lambs.dim() == 2 & theta_bars.dim() == 2)
         nBatch = len(x_lambs)
         obj_values = torch.Tensor(nBatch, 1).type_as(x_lambs)
         theta_values = torch.Tensor(nBatch, self.theta_size).type_as(x_lambs)
@@ -78,7 +76,7 @@ class DualFunction(Function):
             lagrangian_hessian = autograd.jacobian(lagrangian_jac)
             res = scipy.optimize.minimize(fun=lagrangian, x0=np.zeros((self.theta_size)), method=self.method, jac=lagrangian_jac, hess=lagrangian_hessian) 
 
-            obj_values[i] = torch.Tensor([-res.fun])
+            obj_values[i] = torch.Tensor([res.fun])
             theta_values[i] = torch.Tensor(res.x)
             jac_values[i] = torch.Tensor(res.jac)
             hessian_values[i] = torch.Tensor(lagrangian_hessian(res.x))
@@ -86,7 +84,8 @@ class DualFunction(Function):
         self.save_for_backward(x_lambs, theta_values, theta_bars, obj_values, jac_values, hessian_values)
         return obj_values
 
-    def get_jac_torch(self, x_lambs, theta_bars):
+    def get_jac_torch(self, x_lambs, theta_bars, get_hess=False):
+        assert(x_lambs.dim() == 2 & theta_bars.dim() == 2)
         nBatch = len(x_lambs)
         dg_dxlamb = torch.Tensor(*x_lambs.shape)
         hess_g = torch.Tensor(*x_lambs.shape, self.x_size + self.m_size)
@@ -132,14 +131,18 @@ class DualFunction(Function):
 
             dtheta_dlamb = torch.matmul(-L_hess_inv, dm_dtheta.transpose(-1,0))
 
-            dg_dx = df_dx + torch.matmul(df_dtheta, dtheta_dx) - torch.matmul(torch.matmul(lamb_torch, dm_dtheta), dtheta_dx)
-            dg_dlamb = torch.matmul(df_dtheta, dtheta_dlamb) - m_value - torch.matmul(torch.matmul(lamb_torch, dm_dtheta), dtheta_dlamb)
+            dg_dx = - df_dx - torch.matmul(df_dtheta, dtheta_dx) + torch.matmul(torch.matmul(lamb_torch, dm_dtheta), dtheta_dx)
+            dg_dlamb = - torch.matmul(df_dtheta, dtheta_dlamb) + m_value + torch.matmul(torch.matmul(lamb_torch, dm_dtheta), dtheta_dlamb)
             dg_dxlamb[i] = torch.cat((dg_dx, dg_dlamb), dim=0)
 
-            for j in range(self.x_size + self.m_size):
-                hess_g[i][j] = torch.autograd.grad(dg_dxlamb[i][j], x_lamb_torch, retain_graph=True, create_graph=True)[0]
+            if get_hess:
+                for j in range(self.x_size + self.m_size):
+                    hess_g[i][j] = torch.autograd.grad(dg_dxlamb[i][j], x_lamb_torch, retain_graph=True, create_graph=True)[0]
 
-        return dg_dxlamb, hess_g
+        if get_hess:
+            return dg_dxlamb, hess_g
+        else:
+            return dg_dxlamb
 
     def backward(self, dl_dg):
         x_lambs, thetas, theta_bars, obj_values, theta_jac, theta_hess = self.save_tensors
@@ -185,8 +188,8 @@ class DualFunction(Function):
 if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch Matching')
-    parser.add_argument('--batch-size', type=int, default=2, metavar='N',
-                        help='input batch size for training (default: 2)')
+    parser.add_argument('--batch-size', type=int, default=1, metavar='N',
+                        help='input batch size for training (default: 1)')
     parser.add_argument('--test-batch-size', type=int, default=1, metavar='N',
                         help='input batch size for testing (default: 1)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
@@ -250,11 +253,36 @@ if __name__ == "__main__":
 
     for batch_idx, (features, labels) in enumerate(train_loader):
         features, labels = features.to(DEVICE), labels.to(DEVICE)
-        theta_bar = model(features)
+        theta_bars = model(features).view(nBatch, theta_size)
         x_lamb = torch.cat((x,lamb), dim=1)
-        obj_value = dual_function(x_lamb, theta_bar)
+        obj_value = dual_function(x_lamb, theta_bars)
         # obj_value, theta_opt, theta_jac, theta_hessian = obj_function.value(x, lamb, features)
-        print(obj_value)
-        g_jac, g_hess = dual_function.get_jac_torch(x_lamb, theta_bar)
+        # g_jac, g_hess = dual_function.get_jac_torch(x_lamb, theta_bar, get_hess=True)
         break
+
+    theta_bar = theta_bars[0:1,:]
+    def g(x):
+        # print(x)
+        x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
+        return -dual_function(x_torch, theta_bar).detach().numpy()[0]
+    def g_jac(x):
+        x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
+        gradient = -dual_function.get_jac_torch(x_torch, theta_bar).detach().numpy()[0]
+        print(x)
+        print(gradient)
+        return gradient
+    def g_hess(x):
+        x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
+        gradient, hessian = dual_function.get_jac_torch(x_torch, theta_bar, get_hess=True)
+        return -hessian.detach().numpy()[0]
+
+    Q = torch.Tensor(dual_function.Q)
+    P = torch.Tensor(dual_function.P)
+    x_opt = - torch.matmul(torch.inverse(Q), theta_bar.view(-1))
+    lamb_opt = torch.matmul(torch.eye(lamb_size) + torch.matmul(P, Q), x_opt)
+    xlamb_opt = torch.cat((x_opt, lamb_opt), dim=0).view(1,800).detach().numpy()
+    print("minimizing...")
+    res = scipy.optimize.minimize(fun=g, x0=np.zeros((1,800)), method="SLSQP", jac=g_jac, hess=g_hess, bounds=[(None, None)] * 800)
+
+
     
