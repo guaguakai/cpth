@@ -36,14 +36,14 @@ class DualFunction(Function):
         self.P = 0.1 * np.eye(self.theta_size)
         self.m_size = m_size
         self.model = model
-        # self.method = "SLSQP"
-        self.method = "Newton-CG"
+        self.method = "SLSQP"
+        # self.method = "Newton-CG"
         self.tol = 1e-3
         self.M = 1e3
         self.theta_bounds = [(-self.M,self.M)] * self.theta_size
 
     def m(self, theta, theta_bar, lib=np): # numpy inputs
-        return (theta - theta_bar) ** 2 
+        return (theta - theta_bar)
         # return (theta - theta_bar) ** 2 - 3
 
     def f(self, x, theta, lib=np): # default numpy inputs
@@ -77,10 +77,10 @@ class DualFunction(Function):
 
             lagrangian_jac = autograd.grad(lagrangian)
             lagrangian_hessian = autograd.jacobian(lagrangian_jac)
-            def lagrangian_jacp(theta, p):
-                return np.dot(lagrangian_jac(theta), p)
-            lagrangian_hessianp = autograd.grad(lagrangian_jacp)
-            res = scipy.optimize.minimize(fun=lagrangian, x0=theta_bar, method=self.method, jac=lagrangian_jac, hessp=lagrangian_hessianp, tol=self.tol, bounds=self.theta_bounds) 
+            # def lagrangian_jacp(theta, p):
+            #     return np.dot(lagrangian_jac(theta), p)
+            # lagrangian_hessianp = autograd.grad(lagrangian_jacp)
+            res = scipy.optimize.minimize(fun=lagrangian, x0=theta_bar, method=self.method, jac=lagrangian_jac, tol=self.tol, bounds=self.theta_bounds) 
 
             obj_values[i] = torch.Tensor([res.fun])
             theta_values[i] = torch.Tensor(res.x)
@@ -326,7 +326,7 @@ if __name__ == "__main__":
     lamb_opt = torch.matmul(torch.eye(lamb_size) + torch.matmul(P, Q), x_opt)
     xlamb_opt = torch.cat((x_opt, lamb_opt), dim=0).view(1,2*edge_size).detach().numpy()
     print("minimizing...")
-    res = scipy.optimize.minimize(fun=g, x0=np.zeros((1,2*edge_size)), method="SLSQP", jac=g_jac, hess=g_hess)
+    res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((1,2*edge_size)), method="SLSQP", jac=g_jac, hess=g_hess, bounds=[(-np.inf, np.inf)]*(edge_size) + [(0.0, np.inf)]*(edge_size))
     print(res)
 
 
