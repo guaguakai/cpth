@@ -126,8 +126,8 @@ class DualFunction(Dual):
         jac_values = torch.Tensor(nBatch, self.theta_size).type_as(x_lambs)
         hessian_values = torch.Tensor(nBatch, self.theta_size, self.theta_size).type_as(x_lambs)
         for i in range(nBatch):
-            x = x_lambs[i,:x_size].detach().numpy()
-            lamb = x_lambs[i,x_size:].detach().numpy()
+            x = x_lambs[i,:self.x_size].detach().numpy()
+            lamb = x_lambs[i,self.x_size:].detach().numpy()
             theta_bar = theta_bars[i].detach().numpy()
 
             # ============= numpy scipy computing ===================
@@ -162,8 +162,8 @@ class DualFunction(Dual):
         for i in range(nBatch):
             # ======================== same as forward path ============================
             # ------------------------- autograd version -------------------------------
-            x = x_lambs[i,:x_size].detach().numpy()
-            lamb = x_lambs[i,x_size:].detach().numpy() 
+            x = x_lambs[i,:self.x_size].detach().numpy()
+            lamb = x_lambs[i,self.x_size:].detach().numpy() 
             theta_bar = theta_bars[i].detach().numpy() 
 
             def lagrangian(theta):
@@ -183,8 +183,8 @@ class DualFunction(Dual):
             theta_torch = Variable(torch.Tensor(res.x), requires_grad=True)
             theta_bar_torch = Variable(theta_bars[i], requires_grad=True)
             x_lamb_torch = Variable(x_lambs[i], requires_grad=True)
-            x_torch = x_lamb_torch[:x_size]
-            lamb_torch = x_lamb_torch[x_size:]
+            x_torch = x_lamb_torch[:self.x_size]
+            lamb_torch = x_lamb_torch[self.x_size:]
 
             L = -self.f(x_torch, theta_torch, lib=torch) + torch.dot(self.m(theta_torch, theta_bar_torch, lib=torch), lamb_torch)
             L_jac = torch.autograd.grad(L, theta_torch, retain_graph=True, create_graph=True)[0]
@@ -228,8 +228,8 @@ class DualFunction(Dual):
         dl_dxlamb = torch.Tensor(*x_lambs.shape)
         for i in range(nBatch):
             # ========================== gradient computing =============================
-            x = x_lambs[i][:x_size]
-            lamb = x_lambs[i][x_size:x_size+lamb_size]
+            x = x_lambs[i][:self.x_size]
+            lamb = x_lambs[i][self.x_size:self.x_size+self.lamb_size]
             theta_bar = theta_bars[i]
             theta = thetas[i]
             entire_input = np.concatenate((x, lamb, theta_bar, theta))
@@ -265,8 +265,8 @@ class DualGradient(Dual):
         for i in range(nBatch):
             # ======================== same as forward path ============================
             # ------------------------- autograd version -------------------------------
-            x = x_lambs[i,:x_size].detach().numpy()
-            lamb = x_lambs[i,x_size:].detach().numpy() 
+            x = x_lambs[i,:self.x_size].detach().numpy()
+            lamb = x_lambs[i,self.x_size:].detach().numpy() 
             theta_bar = theta_bars[i].detach().numpy() 
 
             def lagrangian(theta):
@@ -313,7 +313,7 @@ class DualGradient(Dual):
             # ========================== gradient computing =============================
         return dl_dxlamb, None # TODO
 
-
+""" # TO BE DELETED
 if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch Matching')
@@ -438,6 +438,6 @@ if __name__ == "__main__":
     print("minimizing...")
     res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((2*edge_size)), method=method, jac=g_jac, hess=g_hess, bounds=[(0.0, M)]*(edge_size) + [(0.0, M)]*(edge_size), constraints=constraints_slsqp)
     print(res)
-
+"""
 
     
