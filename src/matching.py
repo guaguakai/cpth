@@ -134,7 +134,11 @@ if __name__ == "__main__":
     xlamb_opt = torch.cat((x_opt, lamb_opt), dim=0).view(1,2*edge_size).detach().numpy()
     xlamb_opt_torch = Variable(torch.cat((x_opt, lamb_opt), dim=0).view(1,2*edge_size), requires_grad=True)
 
-    gradient = dual_gradient(xlamb_opt_torch, theta_bar)
+    gradient = dual_gradient(xlamb_opt_torch, theta_bar).view(-1)
+    print(gradient.shape)
+    test = torch.dot(gradient[:x_size + lamb_size], torch.ones(x_size + lamb_size))
+    grad_of_grad = torch.autograd.grad(test, xlamb_opt_torch)[0]
+    print(grad_of_grad.shape)
 
     def eq_fun(x):
         return A @ x[:x_size] - b
@@ -147,9 +151,11 @@ if __name__ == "__main__":
     # constraints_slsqp.append(scipy.optimize.LinearConstraint(np.ones((1, x_size)), np.array([-np.inf]), np.array([10])))
     # constraints_slsqp.append({"type": "ineq", "fun": budget_fun, "jac": autograd.grad(budget_fun)})
 
+    """
     print("minimizing...")
     res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((2*edge_size)), method=method, jac=g_jac, hess=g_hess, bounds=[(0.0, M)]*(edge_size) + [(0.0, M)]*(edge_size), constraints=constraints_slsqp)
     print(res)
+    # """
 
 
 

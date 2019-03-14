@@ -259,6 +259,7 @@ class DualGradient(Dual):
         assert(x_lambs.dim() == 2 & theta_bars.dim() == 2)
         nBatch = len(x_lambs)
         dg_dx = torch.Tensor(nBatch, self.x_size + self.lamb_size + self.theta_size)
+        obj_values = torch.Tensor(nBatch, 1).type_as(x_lambs)
         theta_values = torch.Tensor(nBatch, self.theta_size).type_as(x_lambs)
         jac_values = torch.Tensor(nBatch, self.x_size + self.lamb_size + self.theta_size + self.theta_size).type_as(x_lambs)
         hessian_values = torch.Tensor(nBatch, self.theta_size, self.theta_size).type_as(x_lambs)
@@ -301,17 +302,46 @@ class DualGradient(Dual):
             dg_dx[i] = torch.Tensor(L_jac @ dentire_dx)
             # dg_dxlamb[i] = torch.Tensor(dg_dx[:-self.theta_size]) # without the last gradient of theta_bar
             # TODO...
-
+            theta_values[i] = torch.Tensor(theta)
+            obj_values[i] = res.fun
+            
+        self.save_for_backward(x_lambs, theta_values, theta_bars, obj_values, jac_values, hessian_values)
         return dg_dx
 
     def backward(self, dl_dg):
-        x_lambs, thetas, theta_bars, obj_values, theta_jac, theta_hess = self.save_tensors
+        x_lambs, thetas, theta_bars, obj_values, theta_jac, theta_hess = self.saved_tensors
         nBatch = len(x_lambs)
         dl_dxlamb = torch.Tensor(*x_lambs.shape)
+        dl_dtheta_bars = torch.Tensor(*theta_bars.shape)
         for i in range(nBatch):
-            print("TODO")
+            x = x_lambs[i,:self.x_size].detach().numpy()
+            lamb = x_lambs[i,self.x_size:].detach().numpy() 
+            theta_bar = theta_bars[i].detach().numpy() 
+            theta = thetas[i].detach().numpy()
+
+            entire_input = np.concatenate((x, lamb, theta_bar))
+
+            def g_gradient(entire_without_theta):
+                entire = np.concatenate((entire_without_theta, theta))
+                L = self.L_single(entire)
+                L_jac = self.L_gradient_single(entire)
+                L_hess = self.L_hess_single(entire)
+
+                L_hess_theta = L_hess[-self.theta_size:,-self.theta_size:]
+                dtheta_dx = - np.linalg.solve(L_hess_theta, L_hess[-self.theta_size:, :-self.theta_size])
+
+                dentire_dx = np.concatenate((np.eye(self.x_size + self.lamb_size + self.theta_size), dtheta_dx), axis=0)
+                print(dl_dg)
+                gradientp = np.dot(dl_dg, (L_jac @ dentire_dx))
+                # gradientp = np.dot(dl_dg, (L_jac @ dentire_dx)[:self.x_size + self.lamb_size])
+                return gradientp
+
+            hessp = torch.Tensor(autograd.grad(g_gradient)(entire_input))
+            dl_dxlamb[i] = hessp[:self.x_size + self.lamb_size]
+            dl_dtheta_bars[i] = hessp[-self.theta_size:]
+
             # ========================== gradient computing =============================
-        return dl_dxlamb, None # TODO
+        return dl_dxlamb, dl_dtheta_bars # TODO
 
 """ # TO BE DELETED
 if __name__ == "__main__":
