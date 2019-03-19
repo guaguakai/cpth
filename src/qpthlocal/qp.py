@@ -336,7 +336,7 @@ class QPFunction(Function):
                 Ai, bi = (A[i], b[i]) if neq > 0 else (None, None)
                 Gi, hi = G[i], h[i]
                 slacks[i] = hi - torch.matmul(Gi, zhats)
-                lam_nus = # TODO
+                # lam_nus = # TODO
         else:
             assert False
 

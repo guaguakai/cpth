@@ -60,78 +60,42 @@ class Dual(Function):
             P = self.P
         return lib.dot(x, theta) + 0.5 * lib.dot(x, lib.matmul(Q, x)) - 0.5 * lib.dot(theta, lib.matmul(P, theta))
 
-    # ============================ precompute derivatives =========================
-    # entire_input: x, lamb, phi, theta
-    def m_single(self, entire_input):
-        x = entire_input[:self.x_size]
-        lamb = entire_input[self.x_size:self.x_size+self.m_size]
-        phi = entire_input[self.x_size + self.m_size : self.x_size + self.m_size + self.phi_size]
-        theta = entire_input[-self.theta_size:]
-        theta_bar = phi[:self.theta_size]
-        r = phi[-self.theta_size:]
-        return self.constraint_matrix @ (theta - theta_bar) - np.concatenate((r,r), axis=0)
+    def dual_solution(self, x, lamb, phi):
+        theta_bar = phi[:self.x_size]
+        theta = np.linalg.solve(self.P, x - np.transpose(self.constraint_matrix) @ lamb)
+        return theta
 
-    def f_single(self, entire_input):
-        x = entire_input[:self.x_size]
-        lamb = entire_input[self.x_size:self.x_size+self.m_size]
-        phi = entire_input[self.x_size + self.m_size : self.x_size + self.m_size + self.theta_size]
-        theta = entire_input[-self.theta_size:]
-        return np.dot(x, theta) + 0.5 * np.transpose(x) @ self.Q @ x - 0.5 * np.transpose(theta) @ self.P @ theta
-
+    # ================ Lagrangian and gradient computing =================
+    # entire input: x, lamb, phi, theta
     def L_single(self, entire_input):
         x = entire_input[:self.x_size]
-        lamb = entire_input[self.x_size:self.x_size+self.m_size]
-        phi = entire_input[self.x_size + self.m_size : self.x_size + self.m_size + self.phi_size]
+        lamb = entire_input[self.x_size : self.x_size + self.lamb_size]
+        phi = entire_input[self.x_size + self.lamb_size : self.x_size + self.lamb_size + self.phi_size]
         theta = entire_input[-self.theta_size:]
-
-        L = -self.f_single(entire_input) + np.dot(lamb, self.m_single(entire_input))
+        L = -self.f(x, theta) + np.dot(lamb, self.m(theta, phi))
         return L
-
-    def m_gradient_single(self, entire_input):
-        return autograd.grad(self.m_single)(entire_input)
-
-    def f_gradient_single(self, entire_input):
-        return autograd.grad(self.f_single)(entire_input)
 
     def L_gradient_single(self, entire_input):
         return autograd.grad(self.L_single)(entire_input)
 
-    def m_hessp_single(self, entire_input, p):
-        m_gradientp = lambda x: np.dot(p, self.m_gradient_single(entire_input))
-        return autograd.grad(m_gradientp)(entire_input)
-
-    def f_hessp_single(self, entire_input, p):
-        f_gradientp = lambda x: np.dot(p, self.f_gradient_single(entire_input))
-        return autograd.grad(f_gradientp)(entire_input)
+    def L_gradient_single_direct(self, entire_input):
+        x = entire_input[:self.x_size]
+        lamb = entire_input[self.x_size : self.x_size + self.lamb_size]
+        phi = entire_input[self.x_size + self.lamb_size : self.x_size + self.lamb_size + self.phi_size]
+        theta = entire_input[-self.theta_size:]
+        dL_dx = -theta -self.Q @ x
+        dL_dlamb = self.m(x, theta)
+        dL_dphi = np.concatenate((np.transpose(self.constraint_matrix), -(np.concatenate((np.eye(self.x_size), np.eye(self.x_size)), axis=1))), axis=0) @ lamb # TODO error!!
+        dL_dtheta = -x + self.P @ theta + np.transpose(self.constraint_matrix) @ lamb
+        return np.concatenate((dL_dx, dL_dlamb, dL_dphi, dL_dtheta), axis=0)
 
     def L_hessp_single(self, entire_input, p):
         L_gradientp = lambda x: np.dot(p, self.L_gradient_single(entire_input))
         return autograd.grad(L_gradientp)(entire_input)
 
-    def m_hess_single(self, entire_input):
-        return autograd.jacobian(self.m_gradient_single)(entire_input)
-
-    def f_hess_single(self, entire_input):
-        return autograd.jacobian(self.f_gradient_single)(entire_input)
-
     def L_hess_single(self, entire_input):
         return autograd.jacobian(self.L_gradient_single)(entire_input)
 
-    def dual_solution(self, x, lamb, phi):
-        # ============= numpy scipy computing ===================
-        # since numpy, torch, and autograd are not very consistent
-        # we might need to transform everything back to numpy and finish computing the scipy part
-        # then transform all of them back to torch in order to do the back propagation
-        def lagrangian(theta):
-            entire_input = np.concatenate((x, lamb, phi, theta))
-            L = self.L_single(entire_input)
-            return L
-
-        lagrangian_jac = autograd.grad(lagrangian)
-        lagrangian_hessian = autograd.jacobian(lagrangian_jac)
-        theta_bar = phi[:self.theta_size]
-        res = scipy.optimize.minimize(fun=lagrangian, x0=theta_bar, method=self.method, jac=lagrangian_jac, tol=self.tol, bounds=self.theta_bounds)
-        return res.x
         
 
 class DualFunction(Dual):
@@ -140,8 +104,6 @@ class DualFunction(Dual):
         nBatch = len(x_lambs)
         obj_values = torch.Tensor(nBatch, 1).type_as(x_lambs)
         theta_values = torch.Tensor(nBatch, self.theta_size).type_as(x_lambs)
-        jac_values = torch.Tensor(nBatch, self.theta_size).type_as(x_lambs)
-        hessian_values = torch.Tensor(nBatch, self.theta_size, self.theta_size).type_as(x_lambs)
         for i in range(nBatch):
             x = x_lambs[i,:self.x_size].detach().numpy()
             lamb = x_lambs[i,self.x_size:].detach().numpy()
@@ -153,7 +115,7 @@ class DualFunction(Dual):
             obj_values[i] = torch.Tensor([fun])
             theta_values[i] = torch.Tensor(theta)
 
-        self.save_for_backward(x_lambs, theta_values, phis, obj_values)
+        # self.save_for_backward(x_lambs, theta_values, phis, obj_values)
         return obj_values
 
     def backward(self, dl_dg):
@@ -163,6 +125,7 @@ class DualFunction(Dual):
 class DualGradient(Dual):
     def forward(self, x_lambs, phis):
         import torch
+        from torch.autograd import Variable
 
         assert(x_lambs.dim() == 2 & phis.dim() == 2)
         nBatch = len(x_lambs)
@@ -172,13 +135,11 @@ class DualGradient(Dual):
         hessian_values = torch.Tensor(nBatch, self.theta_size, self.theta_size).type_as(x_lambs)
         for i in range(nBatch):
             # ======================== same as forward path ============================
-            # ------------------------- autograd version -------------------------------
             x = x_lambs[i,:self.x_size].detach().numpy()
             lamb = x_lambs[i,self.x_size:].detach().numpy() 
             phi = phis[i].detach().numpy() 
 
             theta = self.dual_solution(x, lamb, phi)
-            # ========================== gradient computing =============================
             entire_input = np.concatenate((x, lamb, phi, theta))
 
             L = self.L_single(entire_input)
@@ -194,11 +155,11 @@ class DualGradient(Dual):
             # TODO...
             theta_values[i] = torch.Tensor(theta)
             
-        self.save_for_backward(x_lambs, theta_values, phis)
+        self.save_for_backward(x_lambs, theta_values, phis, jac_values, hessian_values)
         return dg_dx
 
     def backward(self, dl_dg):
-        x_lambs, thetas, phis = self.saved_tensors
+        x_lambs, thetas, phis, theta_jac, theta_hess = self.saved_tensors
         nBatch = len(x_lambs)
         dl_dxlamb = torch.Tensor(*x_lambs.shape)
         dl_dphis = torch.Tensor(*phis.shape)
@@ -219,9 +180,8 @@ class DualGradient(Dual):
                 L_hess_theta = L_hess[-self.theta_size:,-self.theta_size:]
                 dtheta_dx = - np.linalg.solve(L_hess_theta, L_hess[-self.theta_size:, :-self.theta_size])
 
-                dentire_dx = np.concatenate((np.eye(self.x_size + self.lamb_size + self.phi_size), dtheta_dx), axis=0)
+                dentire_dx = np.concatenate((np.eye(self.x_size + self.lamb_size + self.theta_size), dtheta_dx), axis=0)
                 gradientp = np.dot(dl_dg, (L_jac @ dentire_dx))
-                # gradientp = np.dot(dl_dg, (L_jac @ dentire_dx)[:self.x_size + self.lamb_size])
                 return gradientp
 
             hessp = torch.Tensor(autograd.grad(g_gradient)(entire_input))
@@ -237,12 +197,10 @@ class DualHess(Dual):
         hess = torch.Tensor(nBatch, x_lamb_size, x_lamb_size)
         for i in range(nBatch):
             x = x_lambs[i,:self.x_size].detach().numpy()
-            lamb = x_lambs[i,self.x_size:].detach().numpy()
-            phi = phis[i].detach().numpy()
-
+            lamb = x_lambs[i,self.x_size:].detach().numpy() 
+            phi = phis[i].detach().numpy() 
             theta = self.dual_solution(x, lamb, phi)
 
-            # ========================== gradient computing =============================
             entire_input = np.concatenate((x, lamb, phi))
 
             def g_gradient(entire_without_theta):
@@ -262,17 +220,13 @@ class DualHess(Dual):
     def hessp(self, x_lambs, phis, p):
         assert(x_lambs.dim() == 2 & phis.dim() == 2)
         nBatch = len(x_lambs)
-        dg_dxlamb = torch.Tensor(*x_lambs.shape)
         hessp_g = torch.Tensor(*x_lambs.shape)
         for i in range(nBatch):
-            # ======================== same as forward path ============================
-            # ------------------------- autograd version -------------------------------
             x = x_lambs[i,:self.x_size].detach().numpy()
             lamb = x_lambs[i,self.x_size:].detach().numpy() 
             phi = phis[i].detach().numpy() 
-
             theta = self.dual_solution(x, lamb, phi)
-            # ========================== gradient computing =============================
+
             entire_input = np.concatenate((x, lamb, phi))
 
             def g_gradientp(entire_without_theta):
@@ -290,4 +244,5 @@ class DualHess(Dual):
             hessp_g[i] = hessp[:self.x_size + self.lamb_size]
 
         return hessp_g
+
 
