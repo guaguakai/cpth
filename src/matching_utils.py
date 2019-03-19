@@ -5,9 +5,9 @@ import torch.utils.data as data_utils
 import torch.nn.functional as F
 from torch.utils.data.sampler import SubsetRandomSampler
 
-from qpth.qp import make_gurobi_model
-from qpth.qp import QPFunction
-from qpth.qp import QPSolvers
+from qpthlocal.qp import make_gurobi_model
+from qpthlocal.qp import QPFunction
+from qpthlocal.qp import QPSolvers
 
 # Random Seed Initialization
 SEED = 0
@@ -43,7 +43,7 @@ def load_data(args, kwargs, labels_path="../../diff_opt/cora_graphs_bipartite.pt
     # return features, labels
 
 
-def make_matching_matrix(n):
+def make_matching_matrix(n): # THIS IS G and h!!!
     '''
     Returns a matrix A and vector b such that x lies in the matching polytope
     for a bipartite graph with n nodes iff Ax <= b.
@@ -178,7 +178,7 @@ class MatchingLoss():
         else:
             x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
 
-        loss = (labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ x.view(*x.shape, 1)).mean()
+        loss = -(labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ x.view(*x.shape, 1)).mean()
         net.train()
         return loss
 
@@ -202,7 +202,7 @@ class MatchingLoss():
         else:
             x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
 
-        loss = (labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ x.view(*x.shape, 1)).mean()
+        loss = -(labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ x.view(*x.shape, 1)).mean()
         net.train()
         return loss
 
@@ -227,7 +227,7 @@ class MatchingLoss():
         else:
             x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, G.expand(n_train, *G.shape), h.expand(n_train, *h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
 
-        loss = (labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ ((x.view(*x.shape, 1))[:,:self.n,:])).mean()
+        loss = -(labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ ((x.view(*x.shape, 1))[:,:self.n,:])).mean()
         net.train()
         return loss
 
@@ -252,7 +252,7 @@ class MatchingLoss():
         else:
             x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, G.expand(n_train, *G.shape), h.expand(n_train, *h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
 
-        loss = (labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ ((x.view(*x.shape, 1))[:,:self.n,:])).mean()
+        loss = -(labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ ((x.view(*x.shape, 1))[:,:self.n,:])).mean()
         net.train()
         return loss
 
@@ -278,7 +278,7 @@ class MatchingLoss():
             x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A, self.b)
         else:
             x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
-        loss = (labels.view(labels.shape[0], 1, labels.shape[1]) @ x.view(*x.shape, 1)).mean()
+        loss = -(labels.view(labels.shape[0], 1, labels.shape[1]) @ x.view(*x.shape, 1)).mean()
         return loss
     
     def get_loss_opt(self, features, labels):
@@ -293,6 +293,6 @@ class MatchingLoss():
             x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A, self.b)
         else:
             x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
-        loss = (labels.view(labels.shape[0], 1, labels.shape[1])@x.view(*x.shape, 1)).mean()
+        loss = -(labels.view(labels.shape[0], 1, labels.shape[1])@x.view(*x.shape, 1)).mean()
         return loss
 

@@ -16,10 +16,10 @@ import sklearn as skl
 import sys
 import pickle
 import copy
-
+import time
 
 from matching_utils import Net, load_data, make_matching_matrix
-from obj import Dual, DualFunction, DualGradient
+from obj import Dual, DualFunction, DualGradient, DualHessp
 
 DTYPE = torch.float
 DEVICE = torch.device("cpu")
@@ -65,7 +65,8 @@ if __name__ == "__main__":
     # =============================================================================
 
     edge_size = args.truncated_size**2
-    A, b = make_matching_matrix(args.truncated_size)
+    G, h = make_matching_matrix(args.truncated_size)
+    A, b = torch.Tensor(), torch.Tensor()
 
     x_size     = edge_size
     theta_size = edge_size
@@ -73,6 +74,7 @@ if __name__ == "__main__":
     lamb_size  = m_size
     M = 1e3
     tol = 1e-3
+    # method = "SLSQP"
     method = "trust-constr"
 
     train_loader, test_loader = load_data(args, kwargs)
@@ -92,6 +94,7 @@ if __name__ == "__main__":
     model = Net().to(DEVICE)
     dual_function = DualFunction(model=model, x_size=x_size, theta_size=theta_size, m_size=m_size, edge_size=edge_size)
     dual_gradient = DualGradient(model=model, x_size=x_size, theta_size=theta_size, m_size=m_size, edge_size=edge_size)
+    dual_hessp = DualHessp(model=model, x_size=x_size, theta_size=theta_size, m_size=m_size, edge_size=edge_size)
 
     nBatch = args.batch_size
     print(nBatch)
@@ -126,36 +129,43 @@ if __name__ == "__main__":
         gradient, hessian = dual_function.get_jac_torch(x_torch, theta_bar, get_hess=True)
         return -hessian.detach().numpy()[0]
 
+    def g_hessp(x, p):
+        x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
+        p_torch = torch.Tensor(p)
+        hessp = dual_hessp.hessp(x_torch, theta_bar, p_torch)
+        return -hessp.detach().numpy()[0]
 
-    Q = torch.Tensor(dual_function.Q)
-    P = torch.Tensor(dual_function.P)
-    x_opt = - torch.matmul(torch.inverse(Q), theta_bar.view(-1))
-    lamb_opt = torch.matmul(torch.eye(lamb_size) + torch.matmul(P, Q), x_opt)
-    xlamb_opt = torch.cat((x_opt, lamb_opt), dim=0).view(1,2*edge_size).detach().numpy()
-    xlamb_opt_torch = Variable(torch.cat((x_opt, lamb_opt), dim=0).view(1,2*edge_size), requires_grad=True)
-
-    gradient = dual_gradient(xlamb_opt_torch, theta_bar).view(-1)
-    print(gradient.shape)
-    test = torch.dot(gradient[:x_size + lamb_size], torch.ones(x_size + lamb_size))
-    grad_of_grad = torch.autograd.grad(test, xlamb_opt_torch)[0]
-    print(grad_of_grad.shape)
-
-    def eq_fun(x):
-        return A @ x[:x_size] - b
+    def ineq_fun(x):
+        return G @ x[:x_size] - h
     def budget_fun(x):
         return np.array([- np.sum(x[:x_size]) + 10])
 
+    start_time = time.time()
     constraints_slsqp = []
     # constraints_slsqp.append(scipy.optimize.LinearConstraint(A, b, b))
-    constraints_slsqp.append({"type": "eq", "fun": eq_fun, "jac": autograd.jacobian(eq_fun)})
+    constraints_slsqp.append({"type": "ineq", "fun": ineq_fun, "jac": autograd.jacobian(ineq_fun)})
     # constraints_slsqp.append(scipy.optimize.LinearConstraint(np.ones((1, x_size)), np.array([-np.inf]), np.array([10])))
     # constraints_slsqp.append({"type": "ineq", "fun": budget_fun, "jac": autograd.grad(budget_fun)})
 
-    """
     print("minimizing...")
-    res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((2*edge_size)), method=method, jac=g_jac, hess=g_hess, bounds=[(0.0, M)]*(edge_size) + [(0.0, M)]*(edge_size), constraints=constraints_slsqp)
+    res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((2*edge_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, M)]*(edge_size) + [(0.0, M)]*(edge_size), constraints=constraints_slsqp)
+    # res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((2*edge_size)), method=method, jac=g_jac, hess=g_hess, bounds=[(0.0, M)]*(edge_size) + [(0.0, M)]*(edge_size), constraints=constraints_slsqp)
     print(res)
-    # """
+
+    xlamb_torch = Variable(torch.Tensor(res.x).view(1, x_size + lamb_size), requires_grad=True)
+    gradient = dual_gradient(xlamb_torch, theta_bar)[0]
+    test = torch.dot(gradient[:x_size + lamb_size], torch.ones(x_size + lamb_size))
+    grad_of_grad = torch.autograd.grad(test, xlamb_torch)[0]
+    print(grad_of_grad)
+
+    print("running time: {}".format(time.time() - start_time))
+
+    newG = torch.nn.functional.pad(G, (0, lamb_size, 0, lamb_size), "constant", 0)
+    newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
+    newh = torch.nn.functional.pad(h, (0, lamb_size), "constant", 0)
+    newA = torch.nn.functional.pad(A, (0,0,0,lamb_size), "constant", 0)
+    newb = torch.nn.functional.pad(b, (0, lamb_size), "constant", 0)
+
 
 
 

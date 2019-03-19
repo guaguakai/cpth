@@ -134,10 +134,11 @@ class QPSolvers(Enum):
     GUROBI = 3
     CUSTOM = 4
     SSG = 5
+    ROBUST = 6
 
 
 class QPFunction(Function):
-    def __init__(self, zhats, nus, lams, slacks, eps=1e-12, verbose=0, notImprovedLim=3,
+    def __init__(self, zhats, eps=1e-12, verbose=0, notImprovedLim=3,
                  maxIter=20, solver=QPSolvers.PDIPM_BATCHED, model_params = None, custom_solver=None):
         self.eps = eps
         self.verbose = verbose
@@ -146,9 +147,6 @@ class QPFunction(Function):
         self.solver = solver
         self.custom_solver = custom_solver
         self.zhats = zhats
-        self.nus = nus
-        self.lams = lams
-        self.slacks = slacks
 #        self.constant_constraints = constant_constraints
 
         if model_params is not None:
@@ -328,6 +326,17 @@ class QPFunction(Function):
         elif self.solver == QPSolvers.SSG:
             zhats = self.zhats
             # zhats = self.zhats
+        elif self.solver == QPSolvers.ROBUST:
+            zhats = self.zhats
+            lams = torch.Tensor(nBatch, self.nineq).type_as(Q)
+            slacks = torch.Tensor(nBatch, self.nineq).type_as(Q)
+            if self.neq > 0:
+                nus = torch.Tensor(nBatch, self.neq).type_as(Q)
+            for i in range(nBatch):
+                Ai, bi = (A[i], b[i]) if neq > 0 else (None, None)
+                Gi, hi = G[i], h[i]
+                slacks[i] = hi - torch.matmul(Gi, zhats)
+                lam_nus = # TODO
         else:
             assert False
 
