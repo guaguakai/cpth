@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     edge_size = args.truncated_size**2
     G, h = make_matching_matrix(args.truncated_size)
-    A, b = torch.Tensor(), torch.Tensor()
+    # A, b = torch.Tensor(), torch.Tensor()
 
     x_size     = edge_size
     theta_size = edge_size
@@ -75,8 +75,8 @@ if __name__ == "__main__":
     phi_size = edge_size * 2
     M = 1e3
     tol = 1e-3
-    # method = "SLSQP"
-    method = "trust-constr"
+    method = "SLSQP"
+    # method = "trust-constr"
 
     train_loader, test_loader = load_data(args, kwargs)
 
@@ -130,8 +130,8 @@ if __name__ == "__main__":
 
     def g_hess(x):
         x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
-        gradient, hessian = dual_hess.hess(x_torch, phi, get_hess=True)
-        return -hessian.detach().numpy()[0]
+        hess = dual_hess.hess(x_torch, phi)
+        return -hess.detach().numpy()[0]
 
     def g_hessp(x, p):
         x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
@@ -155,23 +155,24 @@ if __name__ == "__main__":
     res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, M)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp)
     print(res)
 
-    xlamb_torch = Variable(torch.ones(x_size + lamb_size).view(1, x_size + lamb_size), requires_grad=True)
+    xlamb_torch = Variable(torch.Tensor(res.x).view(1, x_size + lamb_size), requires_grad=True)
     gradient = dual_gradient(xlamb_torch, phi)[0]
     test = torch.dot(gradient[:x_size + lamb_size], torch.ones(x_size + lamb_size))
     # grad_of_grad = torch.autograd.grad(test, xlamb_torch)[0]
     # print(grad_of_grad)
     print(g(xlamb_torch))
     print(g_jac(xlamb_torch))
+    hess = g_hess(xlamb_torch)
     p = torch.ones(x_size + lamb_size)
     print(g_hessp(xlamb_torch, p))
 
     print("running time: {}".format(time.time() - start_time))
 
-    # newG = torch.nn.functional.pad(G, (0, lamb_size, 0, lamb_size), "constant", 0)
-    # newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
-    # newh = torch.nn.functional.pad(h, (0, lamb_size), "constant", 0)
-    # newA = torch.nn.functional.pad(A, (0,0,0,lamb_size), "constant", 0)
-    # newb = torch.nn.functional.pad(b, (0, lamb_size), "constant", 0)
+    newG = np.pad(G, ((0, lamb_size), (0, lamb_size)), "constant", constant_values=0)
+    newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
+    newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
+    # newA = np.pad(A, ((0,0),(0,lamb_size)), "constant", constant_values=0)
+    # newb = np.pad(b, (0, lamb_size), "constant", constant_values=0)
 
 
 

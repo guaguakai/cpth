@@ -84,17 +84,17 @@ class Dual(Function):
         phi = entire_input[self.x_size + self.lamb_size : self.x_size + self.lamb_size + self.phi_size]
         theta = entire_input[-self.theta_size:]
         dL_dx = -theta -self.Q @ x
-        dL_dlamb = self.m(x, theta)
+        dL_dlamb = self.m(theta, phi)
         dL_dphi = np.concatenate((np.transpose(self.constraint_matrix), -(np.concatenate((np.eye(self.x_size), np.eye(self.x_size)), axis=1))), axis=0) @ lamb # TODO error!!
         dL_dtheta = -x + self.P @ theta + np.transpose(self.constraint_matrix) @ lamb
         return np.concatenate((dL_dx, dL_dlamb, dL_dphi, dL_dtheta), axis=0)
 
     def L_hessp_single(self, entire_input, p):
-        L_gradientp = lambda x: np.dot(p, self.L_gradient_single(entire_input))
+        L_gradientp = lambda x: np.dot(p, self.L_gradient_single_direct(entire_input))
         return autograd.grad(L_gradientp)(entire_input)
 
     def L_hess_single(self, entire_input):
-        return autograd.jacobian(self.L_gradient_single)(entire_input)
+        return autograd.jacobian(self.L_gradient_single_direct)(entire_input)
 
         
 
@@ -143,7 +143,7 @@ class DualGradient(Dual):
             entire_input = np.concatenate((x, lamb, phi, theta))
 
             L = self.L_single(entire_input)
-            L_jac = self.L_gradient_single(entire_input)
+            L_jac = self.L_gradient_single_direct(entire_input)
             L_hess = self.L_hess_single(entire_input)
 
             L_hess_theta = L_hess[-self.theta_size:,-self.theta_size:]
@@ -174,7 +174,7 @@ class DualGradient(Dual):
             def g_gradient(entire_without_theta):
                 entire = np.concatenate((entire_without_theta, theta))
                 L = self.L_single(entire)
-                L_jac = self.L_gradient_single(entire)
+                L_jac = self.L_gradient_single_direct(entire)
                 L_hess = self.L_hess_single(entire)
 
                 L_hess_theta = L_hess[-self.theta_size:,-self.theta_size:]
@@ -205,7 +205,7 @@ class DualHess(Dual):
 
             def g_gradient(entire_without_theta):
                 entire = np.concatenate((entire_without_theta, theta))
-                L_jac = self.L_gradient_single(entire)
+                L_jac = self.L_gradient_single_direct(entire)
                 L_hess = self.L_hess_single(entire)
 
                 L_hess_theta = L_hess[-self.theta_size:,-self.theta_size:]
@@ -214,7 +214,7 @@ class DualHess(Dual):
                 gradient = (L_jac @ dentire_dx)[:self.x_size + self.lamb_size]
                 return gradient
 
-            hess[i] = torch.Tensor(autograd.jacobian(g_gradient)(entire_input))
+            hess[i] = torch.Tensor(autograd.jacobian(g_gradient)(entire_input))[:,self.x_size + self.lamb_size]
         return hess
 
     def hessp(self, x_lambs, phis, p):
@@ -231,7 +231,7 @@ class DualHess(Dual):
 
             def g_gradientp(entire_without_theta):
                 entire = np.concatenate((entire_without_theta, theta))
-                L_jac = self.L_gradient_single(entire)
+                L_jac = self.L_gradient_single_direct(entire)
                 L_hess = self.L_hess_single(entire)
 
                 L_hess_theta = L_hess[-self.theta_size:,-self.theta_size:]
