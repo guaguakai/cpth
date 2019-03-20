@@ -19,7 +19,7 @@ import copy
 import time
 
 from matching_utils import Net, load_data, make_matching_matrix
-from obj import Dual, DualFunction, DualGradient, DualHess
+from toy_obj import Dual, DualFunction, DualGradient, DualHess
 
 DTYPE = torch.float
 DEVICE = torch.device("cpu")
@@ -125,7 +125,6 @@ if __name__ == "__main__":
     def g_jac(x):
         x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
         gradient = -dual_gradient(x_torch, phi).detach().numpy()[0][:x_size + lamb_size]
-        # gradient = -dual_function.get_jac_torch(x_torch, phi).detach().numpy()[0]
         return gradient
 
     def g_hess(x):
@@ -152,11 +151,11 @@ if __name__ == "__main__":
     # constraints_slsqp.append({"type": "ineq", "fun": budget_fun, "jac": autograd.grad(budget_fun)})
 
     print("minimizing...")
-    # res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, M)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp)
-    # print(res)
+    res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, M)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp)
+    print(res)
 
-    xlamb = torch.ones(1,300)
-    # xlamb = torch.Tensor(res.x)
+    # xlamb = torch.ones(1,300)
+    xlamb = torch.Tensor(res.x)
 
     xlamb_torch = Variable(xlamb.view(1, x_size + lamb_size), requires_grad=True)
     gradient = dual_gradient(xlamb_torch, phi)[0]
@@ -167,8 +166,7 @@ if __name__ == "__main__":
     print(g_jac(xlamb_torch))
     hess = g_hess(xlamb_torch)
     p = torch.ones(x_size + lamb_size)
-    hessp = (g_hessp(xlamb_torch, p))
-    print(hessp)
+    print(g_hessp(xlamb_torch, p))
 
     print("running time: {}".format(time.time() - start_time))
 

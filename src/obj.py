@@ -87,32 +87,12 @@ class Dual(Function):
         L = -self.f_single(entire_input) + np.dot(lamb, self.m_single(entire_input))
         return L
 
-    def m_gradient_single(self, entire_input):
-        return autograd.grad(self.m_single)(entire_input)
-
-    def f_gradient_single(self, entire_input):
-        return autograd.grad(self.f_single)(entire_input)
-
     def L_gradient_single(self, entire_input):
         return autograd.grad(self.L_single)(entire_input)
-
-    def m_hessp_single(self, entire_input, p):
-        m_gradientp = lambda x: np.dot(p, self.m_gradient_single(entire_input))
-        return autograd.grad(m_gradientp)(entire_input)
-
-    def f_hessp_single(self, entire_input, p):
-        f_gradientp = lambda x: np.dot(p, self.f_gradient_single(entire_input))
-        return autograd.grad(f_gradientp)(entire_input)
 
     def L_hessp_single(self, entire_input, p):
         L_gradientp = lambda x: np.dot(p, self.L_gradient_single(entire_input))
         return autograd.grad(L_gradientp)(entire_input)
-
-    def m_hess_single(self, entire_input):
-        return autograd.jacobian(self.m_gradient_single)(entire_input)
-
-    def f_hess_single(self, entire_input):
-        return autograd.jacobian(self.f_gradient_single)(entire_input)
 
     def L_hess_single(self, entire_input):
         return autograd.jacobian(self.L_gradient_single)(entire_input)
@@ -256,7 +236,9 @@ class DualHess(Dual):
                 gradient = (L_jac @ dentire_dx)[:self.x_size + self.lamb_size]
                 return gradient
 
-            hess[i] = torch.Tensor(autograd.jacobian(g_gradient)(entire_input))
+            tmp_hess = torch.Tensor(autograd.jacobian(g_gradient)(entire_input)[:,:self.x_size + self.lamb_size])
+            print(tmp_hess.shape)
+            hess[i] = tmp_hess
         return hess
 
     def hessp(self, x_lambs, phis, p):

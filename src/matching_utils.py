@@ -11,6 +11,7 @@ from qpthlocal.qp import QPSolvers
 
 # Random Seed Initialization
 SEED = 0
+SOLVER = QPSolvers.ROBUST
 torch.manual_seed(SEED)
 np.random.seed(SEED)
 
@@ -174,9 +175,9 @@ class MatchingLoss():
         c_pred = torch.Tensor.cpu(c_pred.squeeze())
 
         if len(self.A) == 0 and len(self.b) == 0:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A, self.b)
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A, self.b)
         else:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
 
         loss = -(labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ x.view(*x.shape, 1)).mean()
         net.train()
@@ -198,9 +199,9 @@ class MatchingLoss():
         c_pred = torch.Tensor.cpu(c_pred.squeeze())
 
         if len(self.A) == 0 and len(self.b) == 0:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A, self.b)
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A, self.b)
         else:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
 
         loss = -(labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ x.view(*x.shape, 1)).mean()
         net.train()
@@ -223,9 +224,9 @@ class MatchingLoss():
         c_pred = F.pad(torch.Tensor.cpu(c_pred.squeeze()), (self.n,0), "constant", 0)
 
         if len(self.A) == 0 and len(self.b) == 0:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, G.expand(n_train, *G.shape), h.expand(n_train, *h.shape), self.A, self.b)
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, G.expand(n_train, *G.shape), h.expand(n_train, *h.shape), self.A, self.b)
         else:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, G.expand(n_train, *G.shape), h.expand(n_train, *h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, G.expand(n_train, *G.shape), h.expand(n_train, *h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
 
         loss = -(labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ ((x.view(*x.shape, 1))[:,:self.n,:])).mean()
         net.train()
@@ -248,9 +249,9 @@ class MatchingLoss():
         c_pred = F.pad(torch.Tensor.cpu(c_pred.squeeze()), (self.n,0), "constant", 0)
 
         if len(self.A) == 0 and len(self.b) == 0:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, G.expand(n_train, *G.shape), h.expand(n_train, *h.shape), self.A, self.b)
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, G.expand(n_train, *G.shape), h.expand(n_train, *h.shape), self.A, self.b)
         else:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, G.expand(n_train, *G.shape), h.expand(n_train, *h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=model_params)(Q.expand(n_train, *Q.shape), c_pred, G.expand(n_train, *G.shape), h.expand(n_train, *h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
 
         loss = -(labels.view(sample_number, 1, labels.shape[1]).to("cpu") @ ((x.view(*x.shape, 1))[:,:self.n,:])).mean()
         net.train()
@@ -275,9 +276,9 @@ class MatchingLoss():
             n_train = 1
         c_pred = c_pred.squeeze()
         if len(self.A) == 0 and len(self.b) == 0:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A, self.b)
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A, self.b)
         else:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
         loss = -(labels.view(labels.shape[0], 1, labels.shape[1]) @ x.view(*x.shape, 1)).mean()
         return loss
     
@@ -290,9 +291,9 @@ class MatchingLoss():
             n_train = 1
         c_pred = c_pred.squeeze()
         if len(self.A) == 0 and len(self.b) == 0:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A, self.b)
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A, self.b)
         else:
-            x = QPFunction(verbose=False, solver=QPSolvers.GUROBI, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
+            x = QPFunction(verbose=False, solver=SOLVER, model_params=self.model_params_linear)(self.zeroQ.expand(n_train, *self.zeroQ.shape), c_pred, self.G.expand(n_train, *self.G.shape), self.h.expand(n_train, *self.h.shape), self.A.expand(n_train, *self.A.shape), self.b.expand(n_train, *self.b.shape))
         loss = -(labels.view(labels.shape[0], 1, labels.shape[1])@x.view(*x.shape, 1)).mean()
         return loss
 
