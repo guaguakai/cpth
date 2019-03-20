@@ -34,8 +34,8 @@ class Dual(Function):
         self.lamb_size = m_size
         self.m_size = m_size
         self.edge_size = edge_size
-        self.Q = 1.0 * np.eye(self.x_size)
-        self.P = 0.1 * np.eye(self.theta_size)
+        self.Q = 0.1 * np.eye(self.x_size)
+        self.P = 0.05 * np.eye(self.theta_size)
         self.model = model
         self.method = "SLSQP"
         # self.method = "Newton-CG"
@@ -44,8 +44,8 @@ class Dual(Function):
         self.theta_bounds = [(-self.M,self.M)] * self.theta_size
 
     def m(self, theta, theta_bar, lib=np): # numpy inputs
-        # return (theta - theta_bar)
-        return (theta - theta_bar) ** 2 - 3
+        return theta - theta_bar
+        # return (theta - theta_bar) ** 2 - 3
 
     def f(self, x, theta, lib=np): # default numpy inputs
         if lib == torch:
@@ -342,6 +342,69 @@ class DualGradient(Dual):
 
             # ========================== gradient computing =============================
         return dl_dxlamb, dl_dtheta_bars # TODO
+
+class DualHessp(Dual):
+    def hessp(self, x_lambs, theta_bars, p):
+        assert(x_lambs.dim() == 2 & theta_bars.dim() == 2)
+        nBatch = len(x_lambs)
+        dg_dxlamb = torch.Tensor(*x_lambs.shape)
+        hessp_g = torch.Tensor(*x_lambs.shape)
+        for i in range(nBatch):
+            # ======================== same as forward path ============================
+            # ------------------------- autograd version -------------------------------
+            x = x_lambs[i,:self.x_size].detach().numpy()
+            lamb = x_lambs[i,self.x_size:].detach().numpy() 
+            theta_bar = theta_bars[i].detach().numpy() 
+
+            def lagrangian(theta):
+                L = -self.f(x, theta) + np.dot(self.m(theta, theta_bar), lamb)
+                return L
+
+            lagrangian_jac = autograd.grad(lagrangian)
+            lagrangian_hessian = autograd.jacobian(lagrangian_jac)
+            def lagrangian_jacp(theta, p):
+                return np.dot(lagrangian_jac(theta), p)
+            lagrangian_hessianp = autograd.grad(lagrangian_jacp)
+
+            res = scipy.optimize.minimize(fun=lagrangian, x0=theta_bar, method=self.method, jac=lagrangian_jac, hessp=lagrangian_hessianp, tol=self.tol, bounds=self.theta_bounds) 
+
+            # ========================== gradient computing =============================
+            theta_torch = Variable(torch.Tensor(res.x), requires_grad=True)
+            theta_bar_torch = Variable(theta_bars[i], requires_grad=True)
+            x_lamb_torch = Variable(x_lambs[i], requires_grad=True)
+            x_torch = x_lamb_torch[:self.x_size]
+            lamb_torch = x_lamb_torch[self.x_size:]
+
+            L = -self.f(x_torch, theta_torch, lib=torch) + torch.dot(self.m(theta_torch, theta_bar_torch, lib=torch), lamb_torch)
+            L_jac = torch.autograd.grad(L, theta_torch, retain_graph=True, create_graph=True)[0]
+            L_hess = torch.Tensor(self.theta_size, self.theta_size)
+            for j in range(self.theta_size):
+                L_hess[j] = torch.autograd.grad(L_jac[j], theta_torch, retain_graph=True, create_graph=True)[0]
+            L_hess_inv = torch.inverse(L_hess)
+            f_value = self.f(x_torch, theta_torch, lib=torch)
+            df_dx = torch.autograd.grad(f_value, x_torch, retain_graph=True, create_graph=True)[0]
+            df_dtheta = torch.autograd.grad(f_value, theta_torch, retain_graph=True, create_graph=True)[0]
+            df_dthetadx = torch.Tensor(self.theta_size, self.x_size)
+            for j in range(self.theta_size):
+                df_dthetadx[j] = torch.autograd.grad(df_dtheta[j], x_torch, retain_graph=True, create_graph=True)[0]
+
+            dtheta_dx = torch.matmul(L_hess_inv, df_dthetadx)
+
+            m_value = self.m(theta_torch, theta_bar_torch, lib=torch)
+            dm_dtheta = torch.Tensor(self.m_size, self.theta_size)
+            for j in range(self.m_size):
+                dm_dtheta[j] = torch.autograd.grad(m_value[j], theta_torch, retain_graph=True, create_graph=True)[0]
+
+            dtheta_dlamb = torch.matmul(-L_hess_inv, dm_dtheta.transpose(-1,0))
+
+            dg_dx = - df_dx - torch.matmul(df_dtheta, dtheta_dx) + torch.matmul(torch.matmul(lamb_torch, dm_dtheta), dtheta_dx)
+            dg_dlamb = - torch.matmul(df_dtheta, dtheta_dlamb) + m_value + torch.matmul(torch.matmul(lamb_torch, dm_dtheta), dtheta_dlamb)
+            dg_dxlamb[i] = torch.cat((dg_dx, dg_dlamb), dim=0)
+
+            hessp_g[i] = torch.autograd.grad(torch.dot(dg_dxlamb[i], p), x_lamb_torch, retain_graph=True, create_graph=True)[0]
+
+        return hessp_g
+
 
 """ # TO BE DELETED
 if __name__ == "__main__":
