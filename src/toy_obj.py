@@ -27,7 +27,7 @@ DEVICE = torch.device("cpu")
 visualization = False
 verbose = True
 
-class Dual(Function):
+class Dual():
     def __init__(self, model, x_size, theta_size, m_size, edge_size, phi_size):
         self.x_size = x_size
         self.theta_size = theta_size
@@ -158,7 +158,7 @@ class Dual(Function):
         
 
 class DualFunction(Dual):
-    def forward(self, x_lambs, phis):
+    def __call__(self, x_lambs, phis):
         assert(x_lambs.dim() == 2 & phis.dim() == 2)
         nBatch = len(x_lambs)
         obj_values = torch.Tensor(nBatch, 1).type_as(x_lambs)
@@ -174,17 +174,12 @@ class DualFunction(Dual):
             obj_values[i] = torch.Tensor([fun])
             theta_values[i] = torch.Tensor(theta)
 
-        # self.save_for_backward(x_lambs, theta_values, phis, obj_values)
         return obj_values
-
-    def backward(self, dl_dg):
-        # ***This function might not be used
-        return None, None # TODO
 
 
 
 class DualGradient(Dual):
-    def forward(self, x_lambs, phis):
+    def __call__(self, x_lambs, phis):
         assert(x_lambs.dim() == 2 & phis.dim() == 2)
         nBatch = len(x_lambs)
         dg_dx = torch.Tensor(nBatch, self.x_size + self.lamb_size + self.phi_size)
@@ -198,7 +193,6 @@ class DualGradient(Dual):
             # dg_dxlamb[i] = torch.Tensor(dg_dx[:-self.theta_size]) # without the last gradient of phi
             # TODO...
             
-        self.save_for_backward(x_lambs, phis)
         return dg_dx
 
     # def backward(self, dl_dg):
