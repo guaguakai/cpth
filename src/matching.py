@@ -19,6 +19,7 @@ import sys
 import pickle
 import copy
 import time
+import tqdm
 
 from matching_utils import Net, load_data, make_matching_matrix
 from toy_obj import Dual, DualFunction, DualGradient, DualHess
@@ -100,79 +101,80 @@ if __name__ == "__main__":
     # constraints_slsqp.append(scipy.optimize.LinearConstraint(A, b, b))
     constraints_slsqp.append({"type": "ineq", "fun": ineq_fun, "jac": autograd.jacobian(ineq_fun)})
 
-    learning_rate = 1e-3
+    learning_rate = 1e-2
+    num_epochs = 50
     optimizer = optim.SGD(list(model.parameters()) + list(uncertainty_model.parameters()), lr=learning_rate, momentum=0.5)
 
-    for batch_idx, (features, labels) in enumerate(train_loader):
-        features, labels = features.to(DEVICE), labels.to(DEVICE)
-        mean = model(features).view(nBatch, theta_size)
-        variance = uncertainty_model(features).view(nBatch, theta_size)
-        phis = torch.cat((mean, variance), dim=1)
-        x_lamb = torch.cat((x,lamb), dim=1)
-        obj_value = dual_function(x_lamb, phis)
+    for epoch in tqdm.trange(num_epochs):
+        for batch_idx, (features, labels) in enumerate(train_loader):
+            features, labels = features.to(DEVICE), labels.to(DEVICE)
+            mean = model(features).view(nBatch, theta_size)
+            variance = uncertainty_model(features).view(nBatch, theta_size)
+            phis = torch.cat((-mean, variance), dim=1)
+            x_lamb = torch.cat((x,lamb), dim=1)
+            obj_value = dual_function(x_lamb, phis)
 
-        def g(x):
-            x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
-            value = -dual_function(x_torch, phis).detach().numpy()[0]
-            # print(value)
-            return value
+            def g(x):
+                x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
+                value = -dual_function(x_torch, phis).detach().numpy()[0]
+                # print(value)
+                return value
 
-        def g_jac(x):
-            x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
-            gradient = -dual_gradient(x_torch, phis).detach().numpy()[0][:x_size + lamb_size]
-            # gradient = -dual_function.get_jac_torch(x_torch, phi).detach().numpy()[0]
-            return gradient
+            def g_jac(x):
+                x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
+                gradient = -dual_gradient(x_torch, phis).detach().numpy()[0][:x_size + lamb_size]
+                # gradient = -dual_function.get_jac_torch(x_torch, phi).detach().numpy()[0]
+                return gradient
 
-        def g_hess(x):
-            x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
-            hess = dual_hess.hess(x_torch, phis)
-            return -hess.detach().numpy()[0]
+            def g_hess(x):
+                x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
+                hess = dual_hess.hess(x_torch, phis)
+                return -hess.detach().numpy()[0]
 
-        def g_hessp(x, p):
-            x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
-            p_torch = torch.Tensor(p)
-            hessp = dual_hess.hessp(x_torch, phis, p_torch)
-            return -hessp.detach().numpy()[0]
+            def g_hessp(x, p):
+                x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
+                p_torch = torch.Tensor(p)
+                hessp = dual_hess.hessp(x_torch, phis, p_torch)
+                return -hessp.detach().numpy()[0]
 
-        start_time = time.time()
-        print("minimizing...")
-        res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(-M, M)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp, options={"maxiter": 10})
-        print(res)
-        print("running time: {}".format(time.time() - start_time))
+            start_time = time.time()
+            print("minimizing...")
+            res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(-M, M)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp, options={"maxiter": 10})
+            print("running time: {}".format(time.time() - start_time))
 
-        xlamb = torch.Tensor(res.x).view(1, x_size + lamb_size)
+            xlamb = torch.Tensor(res.x).view(1, x_size + lamb_size)
 
-        newG = np.pad(G, ((0, lamb_size), (0, lamb_size)), "constant", constant_values=0)
-        newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
-        newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
+            newG = np.pad(G, ((0, lamb_size), (0, lamb_size)), "constant", constant_values=0)
+            newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
+            newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
 
-        extended_A= torch.Tensor()
-        extended_b= torch.Tensor()
-        extended_G=torch.from_numpy(newG).float()
-        extended_h=torch.from_numpy(newh).float()
-        
-        Q = -dual_hess.hess(xlamb, phis)
-        print("Q diagonal")
-        print(torch.diag(Q[0]))
+            extended_A= torch.Tensor()
+            extended_b= torch.Tensor()
+            extended_G=torch.from_numpy(newG).float()
+            extended_h=torch.from_numpy(newh).float()
+            
+            hess = -dual_hess.hess(xlamb, phis)
+            regularization_term = 0.1 * torch.eye(hess.shape[-1])
+            Q = hess + regularization_term
 
-        jac = -dual_gradient(xlamb, phis)[:,:x_size + lamb_size]
-        p = (jac.view(1, -1) - torch.matmul(xlamb, Q)).squeeze()
-        
-        qp_solver = qpthlocal.qp.QPFunction(verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI,
-                                       zhats=xlamb)
+            jac = -dual_gradient(xlamb, phis)[:,:x_size + lamb_size]
+            p = (jac.view(1, -1) - torch.matmul(xlamb, Q)).squeeze()
+            
+            qp_solver = qpthlocal.qp.QPFunction(verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI,
+                                           zhats=xlamb)
 
-        new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
-        new_x = new_xlamb_opt[:,:x_size]
+            new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
+            new_x = new_xlamb_opt[:,:x_size]
 
-        # print("Old xlamb")
-        # print(xlamb)
-        # print("New xlamb")
-        # print(new_xlamb_opt)
+            print("Old xlamb")
+            print(xlamb)
+            print("New xlamb")
+            print(new_xlamb_opt)
 
-        loss = -(labels.view(labels.shape[0], 1, labels.shape[1]).to("cpu") @ new_x.view(*new_x.shape, 1)).mean()
-        print("Loss: {}".format(loss))
+            loss = -(labels.view(labels.shape[0], 1, labels.shape[1]).to("cpu") @ new_x.view(*new_x.shape, 1)).mean()
+            print("Loss: {}".format(loss))
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
