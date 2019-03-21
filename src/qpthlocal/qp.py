@@ -1,6 +1,7 @@
 import torch
 from torch.autograd import Function
 import numpy as np
+
 from .util import bger, expandParam, extract_nBatch
 from . import solvers
 from .solvers.pdipm import batch as pdipm_b
@@ -243,7 +244,10 @@ class QPFunction(Function):
             vals = torch.Tensor(nBatch).type_as(Q)
             zhats = torch.Tensor(nBatch, self.nz).type_as(Q)
             lams = torch.Tensor(nBatch, self.nineq).type_as(Q)
-            nus = torch.Tensor(nBatch, self.neq).type_as(Q)
+            if self.neq > 0:
+                nus = torch.Tensor(nBatch, self.neq).type_as(Q)
+            else:
+                nus = torch.Tensor().type_as(Q)
             slacks = torch.Tensor(nBatch, self.nineq).type_as(Q)
             for i in range(nBatch):
                 Ai, bi = (A[i], b[i]) if neq > 0 else (None, None)
@@ -335,24 +339,32 @@ class QPFunction(Function):
             for i in range(nBatch):
                 Ai, bi = (A[i], b[i]) if neq > 0 else (None, None)
                 Gi, hi = G[i], h[i]
-                print ('hi ',hi.shape)
-                print ('GiZ ', Gi.shape, zhats.shape)
-                slacks[i] = hi - (torch.matmul(Gi, zhats)).squeeze()
+                
+                zhat = zhats[i,:]
+                slacks[i] = hi - torch.matmul(Gi, zhat)
 
-                Qx_minus_P= torch.matmul(Q[i], zhats) - p[i]
-                print('Ai ',Ai.shape)
-                bigA=np.concatenate(
-                        ( np.concatenate((torch.t(Ai), torch.t(Gi)), axis=1),
-                          np.concatenate((torch.zeros(len(Gi), len(Ai)), torch.diag(slacks[i])), axis=1)
-                        ) , axis=0)
+                Qx_plus_P= torch.matmul(Q[i], zhat) + p[i]
                 
-                bigB= np.concatenate( (-Qx_minus_P,  torch.zeros((len(Gi),Qx_minus_P.shape[1]))) , axis=0)
+                if neq > 0:
+                    bigA=torch.cat(
+                            ( torch.cat((torch.t(Ai), torch.t(Gi)), dim=1),
+                              torch.cat((torch.zeros(len(Gi), len(Ai)), torch.diag(slacks[i])), dim=1)
+                            ) , dim=0)
+                else:
+                    bigA=torch.cat(
+                            (torch.t(Gi), torch.diag(slacks[i]))
+                            , dim=0)
+
+                bigB= torch.cat( (-Qx_plus_P,  torch.zeros(len(slacks[i]))) , dim=0)
+                print(bigA.shape)
+                print(bigB.shape)
+                print(slacks[i])
                 
-                lam_nus = np.linalg.lstsq(bigA, bigB)
+                nu_lams = torch.Tensor(np.linalg.solve(bigA.numpy(), bigB.numpy()))
                 
                 
-                self.lams[i]= lam_nus[:len(Ai)]
-                self.nus[i]= lam_nus[-len(slacks[i]):]
+                self.nus[i]= nu_lams[:len(Ai)]
+                self.lams[i]= nu_lams[-len(slacks[i]):]
                 self.slacks[i]=slacks[i]
 
         else:
