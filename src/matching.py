@@ -143,8 +143,8 @@ if __name__ == "__main__":
         newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
         newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
 
-        A= torch.Tensor()
-        b= torch.Tensor()
+        #A= torch.Tensor(1,1)
+        #b= torch.Tensor(1)
         G=torch.from_numpy(newG).float()
         h=torch.from_numpy(newh).float()
         

@@ -1,6 +1,6 @@
 import torch
 from torch.autograd import Function
-
+import numpy as np
 from .util import bger, expandParam, extract_nBatch
 from . import solvers
 from .solvers.pdipm import batch as pdipm_b
@@ -335,10 +335,12 @@ class QPFunction(Function):
             for i in range(nBatch):
                 Ai, bi = (A[i], b[i]) if neq > 0 else (None, None)
                 Gi, hi = G[i], h[i]
-                slacks[i] = hi - torch.matmul(Gi, zhats)
+                print ('hi ',hi.shape)
+                print ('GiZ ', Gi.shape, zhats.shape)
+                slacks[i] = hi - (torch.matmul(Gi, zhats)).squeeze()
 
                 Qx_minus_P= torch.matmul(Q[i], zhats) - p[i]
-                
+                print('Ai ',Ai.shape)
                 bigA=np.concatenate(
                         ( np.concatenate((torch.t(Ai), torch.t(Gi)), axis=1),
                           np.concatenate((torch.zeros(len(Gi), len(Ai)), torch.diag(slacks[i])), axis=1)
@@ -346,7 +348,7 @@ class QPFunction(Function):
                 
                 bigB= np.concatenate( (-Qx_minus_P,  torch.zeros((len(Gi),Qx_minus_P.shape[1]))) , axis=0)
                 
-                lam_nus = np.linalg.solve(bigA, bigB)
+                lam_nus = np.linalg.lstsq(bigA, bigB)
                 
                 
                 self.lams[i]= lam_nus[:len(Ai)]
