@@ -143,20 +143,20 @@ if __name__ == "__main__":
         newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
         newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
 
-        A= torch.Tensor()
-        b= torch.Tensor()
-        G=torch.from_numpy(newG).float()
-        h=torch.from_numpy(newh).float()
+        extended_A= torch.Tensor()
+        extended_b= torch.Tensor()
+        extended_G=torch.from_numpy(newG).float()
+        extended_h=torch.from_numpy(newh).float()
         
-        Q = dual_hess.hess(xlamb_torch, phis)
+        Q = -dual_hess.hess(xlamb_torch, phis)
         jac = -dual_gradient(xlamb_torch, phis)[:,:x_size + lamb_size]
         print(Q.shape)
         print(jac.shape)
         p = (jac.view(1, -1) - torch.matmul(xlamb_torch, Q)).squeeze()
         
-        qp_solver = qpthlocal.qp.QPFunction(verbose=True, solver=qpthlocal.qp.QPSolvers.ROBUST,
+        qp_solver = qpthlocal.qp.QPFunction(verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI,
                                        zhats=torch.t(xlamb_torch))
 
-        new_xlamb_opt = qp_solver(Q, p, G, h, A, b)
+        new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
 
 
