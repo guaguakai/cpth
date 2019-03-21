@@ -241,4 +241,4 @@ if __name__ == "__main__":
             print("Testing loss: {}".format(loss))
             testing_loss.append(loss)
 
-        print("Overall testing loss: {}", np.mean(testing_loss))
+        print("Overall testing loss: {}".format(np.mean(testing_loss)))
