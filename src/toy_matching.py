@@ -4,7 +4,6 @@ import autograd.numpy as np
 import autograd
 
 import qpth
-import qpthlocal
 import torch
 from torch.autograd import Variable, Function
 import scipy.optimize
@@ -20,7 +19,7 @@ import copy
 import time
 
 from matching_utils import Net, load_data, make_matching_matrix
-from obj import Dual, DualFunction, DualGradient, DualHess
+from toy_obj import Dual, DualFunction, DualGradient, DualHess
 
 DTYPE = torch.float
 DEVICE = torch.device("cpu")
@@ -126,7 +125,6 @@ if __name__ == "__main__":
     def g_jac(x):
         x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
         gradient = -dual_gradient(x_torch, phi).detach().numpy()[0][:x_size + lamb_size]
-        # gradient = -dual_function.get_jac_torch(x_torch, phi).detach().numpy()[0]
         return gradient
 
     def g_hess(x):
@@ -152,92 +150,29 @@ if __name__ == "__main__":
     # constraints_slsqp.append(scipy.optimize.LinearConstraint(np.ones((1, x_size)), np.array([-np.inf]), np.array([10])))
     # constraints_slsqp.append({"type": "ineq", "fun": budget_fun, "jac": autograd.grad(budget_fun)})
 
-    print("minimizing...")    
-    # res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, M)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp)
-    # print(res)
+    print("minimizing...")
+    res = scipy.optimize.minimize(fun=g, x0=0.5 * np.ones((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, M)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp)
+    print(res)
 
-    
-    xlamb = torch.ones(1,300)
-    # xlamb = torch.Tensor(res.x)
+    # xlamb = torch.ones(1,300)
+    xlamb = torch.Tensor(res.x)
 
     xlamb_torch = Variable(xlamb.view(1, x_size + lamb_size), requires_grad=True)
     gradient = dual_gradient(xlamb_torch, phi)[0]
     test = torch.dot(gradient[:x_size + lamb_size], torch.ones(x_size + lamb_size))
     # grad_of_grad = torch.autograd.grad(test, xlamb_torch)[0]
     # print(grad_of_grad)
-    
     print(g(xlamb_torch))
     print(g_jac(xlamb_torch))
     hess = g_hess(xlamb_torch)
     p = torch.ones(x_size + lamb_size)
-    hessp = (g_hessp(xlamb_torch, p))
-    print(hessp)
+    print(g_hessp(xlamb_torch, p))
 
     print("running time: {}".format(time.time() - start_time))
-    #G, h = make_matching_matrix
 
     newG = np.pad(G, ((0, lamb_size), (0, lamb_size)), "constant", constant_values=0)
     newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
-
     newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
-    #newA = torch.nn.functional.pad(A, (0,0,0,lamb_size), "constant", 0)
-    #newb = torch.nn.functional.pad(b, (0, lamb_size), "constant", 0)
-    A= torch.Tensor()
-    b= torch.Tensor()
-    G=torch.from_numpy(newG).float()
-    h=torch.from_numpy(newh).float()
-    #out = scipy.optimize.minimize(neg_obj, initial, method='SLSQPjac=grad(neg_obj), bounds=bounds,constraints=constraints_slsqp)
-
-    #current_coverage = out['x'].reshape(1, -1)
-    #opt_coverage = torch.from_numpy(current_coverage).float()
-    
-    # set up backwards pass
-    #G = torch.from_numpy(np.concatenate((np.eye(num_targets),-np.eye(num_targets)), axis=0)).float()
-    #h = torch.from_numpy(np.concatenate((np.ones((num_targets, 1)),
-    #                                     np.zeros((num_targets, 1))),
-    #                                       axis=0)).squeeze().float()
-    
-    Q = torch.from_numpy(g_hess(xlamb_torch)).float()
-    #jac = get_jac_torch(opt_coverage, defender_values[i, :].view(1, -1), attacker_values[i, :].view(1, -1),
-    #                    attacker_w, regularization=regularization).squeeze()
-    jac=torch.from_numpy(g_jac(xlamb_torch)).float()
-    # differentiable
-    p = (jac.view(1, -1) - torch.matmul(xlamb_torch, Q)).squeeze()
-    
-    #A = torch.from_numpy(np.ones((1, num_targets))).float()
-    #b = torch.from_numpy(np.ones((1, 1)) * defender_resources).float()
-    
-    # note qpth's nus are our lams and vice versa
-    
-    #slacks = (h.view(-1, 1) - G.matmul(opt_coverage.view(-1, 1))).view(1, -1)
-    #epsilon = 1.e-10
-    #active = np.where(np.logical_and(current_coverage > epsilon,
-    #                                 current_coverage < 1. - epsilon))[1]
-    #lams = -torch.mean(jac[active]).view(1, -1)
-    # print("lams ", lams)
-    #zero_coverage = np.where(current_coverage < epsilon)[1]
-    # print("zero coverage ", zero_coverage)
-    #one_coverage = np.where(current_coverage > 1. - epsilon)[1]
-    # print("one coverage ", one_coverage)
-    #nus_top = np.zeros((num_targets, 1))
-    #nus_top[one_coverage] = (-jac.detach().numpy().reshape(-1, 1)[one_coverage]
-    #- lams.detach().numpy())
-    #nus_bottom = np.zeros((num_targets, 1))
-    #nus_bottom[zero_coverage] = (lams.detach().numpy() +
-    #          jac.detach().numpy().reshape(-1, 1)[zero_coverage])
-    #nus = torch.from_numpy(np.concatenate((nus_top, nus_bottom), axis=0)).view(1, -1).float()
-    # print("nus ", nus)
-    #error = -jac.view(-1, 1) - torch.t(G).matmul(nus.view(-1, 1)) - lams
-    # print("error ", error)
-    qp_solver = qpthlocal.qp.QPFunction(verbose=True, solver=qpthlocal.qp.QPSolvers.ROBUST,
-                                   zhats=torch.t(xlamb_torch))
-    # qp_solver.zhats = opt_coverage
-    # qp_solver.slacks = slacks
-    # qp_solver.nus = lams
-    # qp_solver.lams = nus
-    xlamb_opt = qp_solver(Q, p, G, h, A, b)
-
-    #newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
     # newA = np.pad(A, ((0,0),(0,lamb_size)), "constant", constant_values=0)
     # newb = np.pad(b, (0, lamb_size), "constant", constant_values=0)
 

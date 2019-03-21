@@ -336,6 +336,7 @@ class QPFunction(Function):
                 Ai, bi = (A[i], b[i]) if neq > 0 else (None, None)
                 Gi, hi = G[i], h[i]
                 slacks[i] = hi - torch.matmul(Gi, zhats)
+
                 Qx_minus_P= torch.matmul(Q[i], zhats) - p[i]
                 
                 bigA=np.concatenate(
@@ -347,11 +348,11 @@ class QPFunction(Function):
                 
                 lam_nus = np.linalg.solve(bigA, bigB)
                 
-                #TO DO: separate lamda and nu and store in self. 
                 
                 self.lams[i]= lam_nus[:len(Ai)]
                 self.nus[i]= lam_nus[-len(slacks[i]):]
                 self.slacks[i]=slacks[i]
+
         else:
             assert False
 
