@@ -46,6 +46,11 @@ class Dual():
         self.theta_bounds = [(-self.M,self.M)] * self.theta_size
         self.constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size)), axis=0)
 
+        self.Q_extended = np.concatenate(
+                (-np.concatenate((self.Q + self.P_inv, self.P_inv @ self.constraint_matrix.transpose()), axis=1),
+                np.concatenate((self.constraint_matrix @ self.P_inv, -self.constraint_matrix @ self.P_inv @ self.constraint_matrix.transpose()), axis=1)),
+                axis=0)
+
     def m(self, theta, phi, lib=np): # numpy inputs
         theta_bar = phi[:self.theta_size]
         r = phi[-self.theta_size:]
@@ -263,7 +268,8 @@ class DualHess(Dual):
 
             # hess[i] = torch.Tensor(autograd.jacobian(g_gradient)(entire_input))[:,self.x_size + self.lamb_size]
 
-            hess[i] = torch.Tensor(autograd.jacobian(self.g_gradient_torch)(x_lamb, phi)[:self.x_size + self.lamb_size, : self.x_size + self.lamb_size])
+            # hess[i] = torch.Tensor(autograd.jacobian(self.g_gradient_torch)(x_lamb, phi)[:self.x_size + self.lamb_size, : self.x_size + self.lamb_size])
+            hess[i] = torch.Tensor(self.Q_extended)
         return hess
 
     def hessp(self, x_lambs, phis, p):

@@ -63,7 +63,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if use_cuda else "cpu")
     print(device)
 
-    kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
+    kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
     # =============================================================================
 
@@ -103,6 +103,7 @@ if __name__ == "__main__":
 
     learning_rate = 1e-2
     num_epochs = 50
+    noise_ratio = 0.01
     optimizer = optim.SGD(list(model.parameters()) + list(uncertainty_model.parameters()), lr=learning_rate, momentum=0.5)
 
     for epoch in tqdm.trange(num_epochs):
@@ -110,6 +111,7 @@ if __name__ == "__main__":
         # ======================= training ==========================
         for batch_idx, (features, labels) in enumerate(train_loader):
             features, labels = features.to(DEVICE), labels.to(DEVICE)
+            labels += noise_ratio * torch.Tensor(np.random.normal(size=labels.shape))
             mean = model(features).view(nBatch, theta_size)
             variance = uncertainty_model(features).view(nBatch, theta_size)
             phis = torch.cat((-mean, variance), dim=1)
@@ -119,7 +121,7 @@ if __name__ == "__main__":
             def g(x):
                 x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
                 value = -dual_function(x_torch, phis).detach().numpy()[0]
-                # print(value)
+                print(value)
                 return value
 
             def g_jac(x):
@@ -139,8 +141,20 @@ if __name__ == "__main__":
                 hessp = dual_hess.hessp(x_torch, phis, p_torch)
                 return -hessp.detach().numpy()[0]
 
-            start_time = time.time()
-            res = scipy.optimize.minimize(fun=g, x0= np.random.rand((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(-M, M)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp, options={"maxiter": 10})
+            # start_time = time.time()
+            # value = g(np.random.rand(x_size + lamb_size))
+            # print("function evaluation time: {}".format(time.time() - start_time))
+
+            # start_time = time.time()
+            # value = g_jac(np.random.rand(x_size + lamb_size))
+            # print("function gradient evaluation time: {}".format(time.time() - start_time))
+
+            # start_time = time.time()
+            # value = g_hess(np.random.rand(x_size + lamb_size))
+            # print("Hessian evaluation time: {}".format(time.time() - start_time))
+
+
+            res = scipy.optimize.minimize(fun=g, x0= np.random.rand((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(-M, M)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp, options={"maxiter": 20})
 
             xlamb = torch.Tensor(res.x).view(1, x_size + lamb_size)
 
@@ -166,10 +180,10 @@ if __name__ == "__main__":
             new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
             new_x = new_xlamb_opt[:,:x_size]
 
-            # print("Old xlamb")
-            # print(xlamb)
-            # print("New xlamb")
-            # print(new_xlamb_opt)
+            print("Old xlamb")
+            print(xlamb)
+            print("New xlamb")
+            print(new_xlamb_opt)
 
             loss = -(labels.view(labels.shape[0], 1, labels.shape[1]).to("cpu") @ new_x.view(*new_x.shape, 1)).mean()
             print("Training loss: {}".format(loss))
@@ -185,6 +199,7 @@ if __name__ == "__main__":
         testing_loss =[]
         for batch_idx, (features, labels) in enumerate(test_loader):
             features, labels = features.to(DEVICE), labels.to(DEVICE)
+            labels += noise_ratio * torch.Tensor(np.random.normal(size=labels.shape))
             mean = model(features).view(nBatch, theta_size)
             variance = uncertainty_model(features).view(nBatch, theta_size)
             phis = torch.cat((-mean, variance), dim=1)
