@@ -102,11 +102,11 @@ if __name__ == "__main__":
     constraints_slsqp.append({"type": "ineq", "fun": ineq_fun, "jac": autograd.jacobian(ineq_fun)})
 
 
-    learning_rate = 1e-2
+    learning_rate = 1e-3
     num_epochs = 50
     optimizer = optim.SGD(list(model.parameters()) + list(uncertainty_model.parameters()), lr=learning_rate, momentum=0.5)
     
-    noise_sigma = 0.0
+    noise_sigma = 0.5
     
     for epoch in tqdm.trange(num_epochs):
         training_loss = []
