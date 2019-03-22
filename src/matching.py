@@ -187,10 +187,10 @@ if __name__ == "__main__":
             new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
             new_x = new_xlamb_opt[:,:x_size]
 
-            print("Old xlamb")
-            print(xlamb)
-            print("New xlamb")
-            print(new_xlamb_opt)
+            # print("Old xlamb")
+            # print(xlamb)
+            # print("New xlamb")
+            # print(new_xlamb_opt)
 
             loss = -(labels.view(labels.shape[0], 1, labels.shape[1]).to("cpu") @ new_x.view(*new_x.shape, 1)).mean()
             print("Training loss: {}".format(loss))
@@ -244,27 +244,27 @@ if __name__ == "__main__":
 
             xlamb = torch.Tensor(res.x).view(1, x_size + lamb_size)
 
-            # newG = np.pad(G, ((0, lamb_size), (0, lamb_size)), "constant", constant_values=0)
-            # newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
-            # newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
+            newG = np.pad(G, ((0, lamb_size), (0, lamb_size)), "constant", constant_values=0)
+            newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
+            newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
 
-            # extended_A= torch.Tensor()
-            # extended_b= torch.Tensor()
-            # extended_G=torch.from_numpy(newG).float()
-            # extended_h=torch.from_numpy(newh).float()
-            # 
-            # hess = -dual_hess.hess(xlamb, phis)
-            # regularization_term = 0.1 * torch.eye(hess.shape[-1])
-            # Q = hess + regularization_term
+            extended_A= torch.Tensor()
+            extended_b= torch.Tensor()
+            extended_G=torch.from_numpy(newG).float()
+            extended_h=torch.from_numpy(newh).float()
+            
+            hess = -dual_hess.hess(xlamb, phis)
+            regularization_term = 0.1 * torch.eye(hess.shape[-1])
+            Q = hess + regularization_term
 
-            # jac = -dual_gradient(xlamb, phis)[:,:x_size + lamb_size]
-            # p = (jac.view(1, -1) - torch.matmul(xlamb, Q)).squeeze()
-            # 
-            # qp_solver = qpthlocal.qp.QPFunction(verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI,
-            #                                zhats=xlamb)
+            jac = -dual_gradient(xlamb, phis)[:,:x_size + lamb_size]
+            p = (jac.view(1, -1) - torch.matmul(xlamb, Q)).squeeze()
+            
+            qp_solver = qpthlocal.qp.QPFunction(verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI,
+                                           zhats=xlamb)
 
-            # new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
-            # new_x = new_xlamb_opt[:,:x_size]
+            new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
+            new_x = new_xlamb_opt[:,:x_size]
 
             new_x = xlamb[:,:x_size]
 
