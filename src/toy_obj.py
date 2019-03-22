@@ -268,8 +268,8 @@ class DualHess(Dual):
 
             # hess[i] = torch.Tensor(autograd.jacobian(g_gradient)(entire_input))[:,self.x_size + self.lamb_size]
 
-            # hess[i] = torch.Tensor(autograd.jacobian(self.g_gradient_torch)(x_lamb, phi)[:self.x_size + self.lamb_size, : self.x_size + self.lamb_size])
-            hess[i] = torch.Tensor(self.Q_extended)
+            hess[i] = torch.Tensor(autograd.jacobian(self.g_gradient_torch)(x_lamb, phi)[:self.x_size + self.lamb_size, : self.x_size + self.lamb_size])
+            # hess[i] = torch.Tensor(self.Q_extended)
         return hess
 
     def hessp(self, x_lambs, phis, p):

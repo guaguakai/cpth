@@ -104,10 +104,10 @@ if __name__ == "__main__":
 
     learning_rate = 1e-2
     num_epochs = 50
-    noise_ratio = 0.01
+    noise_ratio = 0.1
     optimizer = optim.SGD(list(model.parameters()) + list(uncertainty_model.parameters()), lr=learning_rate, momentum=0.5)
     
-    noise_sigma=0.1
+    noise_sigma = 0.0
     
     for epoch in tqdm.trange(num_epochs):
         training_loss = []
@@ -128,7 +128,7 @@ if __name__ == "__main__":
             def g(x):
                 x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
                 value = -dual_function(x_torch, phis).detach().numpy()[0]
-                print(value)
+                # print(value)
                 return value
 
             def g_jac(x):
