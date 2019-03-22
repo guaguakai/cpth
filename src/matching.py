@@ -101,11 +101,14 @@ if __name__ == "__main__":
     # constraints_slsqp.append(scipy.optimize.LinearConstraint(A, b, b))
     constraints_slsqp.append({"type": "ineq", "fun": ineq_fun, "jac": autograd.jacobian(ineq_fun)})
 
+
     learning_rate = 1e-2
     num_epochs = 50
     noise_ratio = 0.01
     optimizer = optim.SGD(list(model.parameters()) + list(uncertainty_model.parameters()), lr=learning_rate, momentum=0.5)
-
+    
+    noise_sigma=0.1
+    
     for epoch in tqdm.trange(num_epochs):
         training_loss = []
         # ======================= training ==========================
@@ -117,6 +120,10 @@ if __name__ == "__main__":
             phis = torch.cat((-mean, variance), dim=1)
             x_lamb = torch.cat((x,lamb), dim=1)
             obj_value = dual_function(x_lamb, phis)
+            #print ('labels ', labels)
+            
+            # Add Gaussian noise to labels
+            labels= torch.Tensor(np.random.normal(loc=labels, scale=noise_sigma, size=labels.shape))
 
             def g(x):
                 x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
@@ -205,6 +212,9 @@ if __name__ == "__main__":
             phis = torch.cat((-mean, variance), dim=1)
             x_lamb = torch.cat((x,lamb), dim=1)
             obj_value = dual_function(x_lamb, phis)
+
+            # Add Gaussian noise to labels
+            labels=torch.Tensor(np.random.normal(loc=labels, scale=noise_sigma, size=labels.shape))
 
             def g(x):
                 x_torch = torch.Tensor(x).view(1, x_size + lamb_size)

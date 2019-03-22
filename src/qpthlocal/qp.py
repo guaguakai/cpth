@@ -339,6 +339,7 @@ class QPFunction(Function):
             for i in range(nBatch):
                 Ai, bi = (A[i], b[i]) if neq > 0 else (None, None)
                 Gi, hi = G[i], h[i]
+                
                 zhat = zhats[i,:]
                 slacks[i] = hi - torch.matmul(Gi, zhat)
 
