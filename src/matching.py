@@ -118,10 +118,10 @@ if __name__ == "__main__":
             phis = torch.cat((-mean, variance), dim=1)
             x_lamb = torch.cat((x,lamb), dim=1)
             obj_value = dual_function(x_lamb, phis)
-            print ('labels ', labels)
+            #print ('labels ', labels)
             
             # Add Gaussian noise to labels
-            labels= np.random.normal(loc=labels, scale=noise_sigma, size=labels.shape)
+            labels= torch.Tensor(np.random.normal(loc=labels, scale=noise_sigma, size=labels.shape))
 
             def g(x):
                 x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
@@ -199,7 +199,7 @@ if __name__ == "__main__":
             obj_value = dual_function(x_lamb, phis)
 
             # Add Gaussian noise to labels
-            labels=np.random.normal(loc=labels, scale=noise_sigma, size=labels.shape)
+            labels=torch.Tensor(np.random.normal(loc=labels, scale=noise_sigma, size=labels.shape))
 
             def g(x):
                 x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
