@@ -28,7 +28,7 @@ visualization = False
 verbose = True
 
 class Dual():
-    def __init__(self, model, x_size, theta_size, m_size, edge_size, phi_size):
+    def __init__(self, model, x_size, theta_size, m_size, edge_size, phi_size, constraint_matrix):
         self.x_size = x_size
         self.theta_size = theta_size
         self.lamb_size = m_size
@@ -44,7 +44,14 @@ class Dual():
         self.tol = 1e-3
         self.M = 1e3
         self.theta_bounds = [(-self.M,self.M)] * self.theta_size
-        self.constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size)), axis=0)
+        # self.constraint_matrix = 1.0 / self.x_size * np.random.normal(size=(self.m_size, self.x_size)) # random constraints
+        # self.constraint_matrix = 1.0 / self.x_size * np.ones((1, self.x_size)) # budget constraint
+        # self.constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size)), axis=0) # box constraints
+        # self.constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size), 1.0 / self.x_size * np.random.normal(size=(self.m_size - 2 * self.x_size, self.x_size))), axis=0) # box constraints with random constraints
+        # self.constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size), 0.1 * np.array([[0, 1, 0, 0, 1]])), axis=0) # box constraints with random constraints
+        self.constraint_matrix = constraint_matrix
+
+        assert(self.m_size == self.constraint_matrix.shape[0])
 
         self.Q_extended = np.concatenate(
                 (-np.concatenate((self.Q + self.P_inv, self.P_inv @ self.constraint_matrix.transpose()), axis=1),
@@ -53,12 +60,18 @@ class Dual():
 
     def m(self, theta, phi, lib=np): # numpy inputs
         theta_bar = phi[:self.theta_size]
-        r = phi[-self.theta_size:]
+        r = phi[self.theta_size:]
         if lib == np:
-            return self.constraint_matrix @ (theta - theta_bar) - np.concatenate((r,r), axis=0)
+            return self.constraint_matrix @ (theta - theta_bar) - r
         elif lib == torch:
-            return torch.Tensor(self.constraint_matrix) @ (theta - theta_bar) - torch.cat((r,r))
+            return torch.Tensor(self.constraint_matrix) @ (theta - theta_bar) - r
         # return (theta - phi) ** 2 - 3
+
+    def dm_dphi(self, theta, phi, lib=np):
+        if lib == np:
+            return -lib.concatenate((self.constraint_matrix, lib.eye(self.phi_size - self.theta_size)), axis=1)
+        elif lib == torch:
+            return -lib.cat((torch.Tensor(self.constraint_matrix), lib.eye(self.phi_size - self.theta_size)), dim=1)
 
     def f(self, x, theta, lib=np): # default numpy inputs
         if lib == torch:
@@ -143,7 +156,8 @@ class Dual():
             dtheta_dx = self.dtheta_dx(lib=lib)
             dL_dx = -theta - self.Q @ x
             dL_dlamb = self.m(theta, phi, lib=lib)
-            dL_dphi = np.concatenate((np.transpose(constraint_matrix), -(np.concatenate((np.eye(self.x_size), np.eye(self.x_size)), axis=1))), axis=0) @ lamb # TODO error!!
+            dL_dphi = np.transpose(self.dm_dphi(theta, phi, lib=lib)) @ lamb # TODO error!!
+            # dL_dphi = np.concatenate((np.transpose(constraint_matrix), -(np.concatenate((np.eye(self.x_size), np.eye(self.x_size)), axis=1))), axis=0) @ lamb # TODO error!!
             dL_dtheta = -x + self.P @ theta + np.transpose(constraint_matrix) @ lamb
 
             dg_dx = np.concatenate((dL_dx, dL_dlamb, dL_dphi)) + dL_dtheta @ dtheta_dx
@@ -153,7 +167,8 @@ class Dual():
             dtheta_dx = torch.Tensor(self.dtheta_dx(lib=lib))
             dL_dx = -theta - torch.Tensor(self.Q) @ x
             dL_dlamb = self.m(theta, phi, lib=torch)
-            dL_dphi = torch.cat((torch.transpose(constraint_matrix_torch, 0, 1), -(torch.cat((torch.eye(self.x_size), torch.eye(self.x_size)), dim=1))), dim=0) @ lamb # TODO error!!
+            dL_dphi = self.dm_dphi(theta, phi, lib=lib).t() @ lamb # TODO error!!
+            # dL_dphi = torch.cat((torch.transpose(constraint_matrix_torch, 0, 1), -(torch.cat((torch.eye(self.x_size), torch.eye(self.x_size)), dim=1))), dim=0) @ lamb # TODO error!!
             dL_dtheta = -x + torch.Tensor(self.P) @ theta + torch.transpose(constraint_matrix_torch, 0,1) @ lamb
 
             dg_dx = torch.cat((dL_dx, dL_dlamb, dL_dphi)) + dL_dtheta @ dtheta_dx

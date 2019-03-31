@@ -106,7 +106,8 @@ if __name__ == "__main__":
     num_epochs = 50
     optimizer = optim.SGD(list(model.parameters()) + list(uncertainty_model.parameters()), lr=learning_rate, momentum=0.5)
     
-    noise_sigma = 0.5
+    noise_sigma = 0.1
+    # REMINDER!!! This Gaussian noise goes into labels but not features now.
     
     for epoch in tqdm.trange(num_epochs):
         training_loss = []
@@ -122,7 +123,7 @@ if __name__ == "__main__":
             
             # Add Gaussian noise to labels
             labels= torch.Tensor(np.random.normal(loc=labels, scale=noise_sigma, size=labels.shape))
-            features= torch.Tensor(np.random.normal(loc=features, scale=noise_sigma, size=features.shape))
+            # features= torch.Tensor(np.random.normal(loc=features, scale=noise_sigma, size=features.shape))
 
             def g(x):
                 x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
@@ -213,7 +214,7 @@ if __name__ == "__main__":
 
             # Add Gaussian noise to labels
             labels=torch.Tensor(np.random.normal(loc=labels, scale=noise_sigma, size=labels.shape))
-            features=torch.Tensor(np.random.normal(loc=features, scale=noise_sigma, size=features.shape))
+            # features=torch.Tensor(np.random.normal(loc=features, scale=noise_sigma, size=features.shape))
 
             def g(x):
                 x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
