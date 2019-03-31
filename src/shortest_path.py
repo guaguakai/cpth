@@ -70,7 +70,7 @@ if __name__ == "__main__":
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
     # =============================================================================
-    n_nodes = 50
+    n_nodes = 20
     n_instances = 1000
     n_features = 5
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, n_instances=n_instances)
@@ -152,6 +152,7 @@ if __name__ == "__main__":
     for epoch in tqdm.trange(num_epochs):
         training_loss = []
         # ======================= training ==========================
+        x0 = np.random.rand((x_size + lamb_size)) # initial point
         for batch_idx, (features, labels, indices) in enumerate(train_loader):
             features, labels = features.to(device), labels.to(device)
             # ------------------- shortest path matrix --------------
@@ -227,7 +228,10 @@ if __name__ == "__main__":
             # print("Hessian evaluation time: {}".format(time.time() - start_time))
 
 
-            res = scipy.optimize.minimize(fun=g, x0= np.random.rand((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, 1.0)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp, options={"maxiter": 100})
+            res = scipy.optimize.minimize(fun=g, x0=x0, method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, 1.0)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp, options={"maxiter": 100})
+
+            # x0 = res.x # update initial point
+            x0 = np.random.rand((x_size + lamb_size)) # initial point
 
             xlamb = torch.Tensor(res.x).view(1, x_size + lamb_size)
 
@@ -271,6 +275,7 @@ if __name__ == "__main__":
 
         # ======================= testing ==========================
         testing_loss =[]
+        x0 = np.random.rand((x_size + lamb_size)) # initial point
         for batch_idx, (features, labels, indices) in enumerate(test_loader):
             features, labels = features.to(device), labels.to(device)
             # ------------------- shortest path matrix --------------
@@ -293,8 +298,8 @@ if __name__ == "__main__":
 
             mean = model(features).view(nBatch, theta_size)
             # variance = torch.Tensor(attacker_budget).view(1, *attacker_budget.shape).cuda() # exact attacker budget 
-            variance = uncertainty_model(features).view(nBatch, m_size) * 0.1
-            phis = torch.cat((mean, variance), dim=1).cpu()
+            variance = uncertainty_model(features).view(nBatch, m_size).detach() * 0.1
+            phis = torch.cat((mean, variance), dim=1).cpu().detach()
             x_lamb = torch.cat((x,lamb), dim=1)
             obj_value = dual_function(x_lamb, phis)
 
@@ -331,7 +336,9 @@ if __name__ == "__main__":
                 return hessp.detach().numpy()[0]
 
             start_time = time.time()
-            res = scipy.optimize.minimize(fun=g, x0= np.random.rand((x_size + lamb_size)), method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, 1.0)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp, options={"maxiter": 100})
+            res = scipy.optimize.minimize(fun=g, x0=x0, method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, 1.0)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp, options={"maxiter": 100})
+            # x0 = res.x # update initial point
+            x0 = np.random.rand((x_size + lamb_size)) # initial point
 
             xlamb = torch.Tensor(res.x).view(1, x_size + lamb_size)
 
