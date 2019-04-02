@@ -23,10 +23,10 @@ import tqdm
 
 from shortest_path_utils import Net, ShortestPathLoss, make_fc, constrained_attack, random_constraints
 
-from shortest_path_utils import load_data
-from shortest_path_utils import generate_graph
-# from shortest_path_utils import load_toy_data as load_data
-# from shortest_path_utils import generate_toy_graph as generate_graph
+# from shortest_path_utils import load_data
+# from shortest_path_utils import generate_graph
+from shortest_path_utils import load_toy_data as load_data
+from shortest_path_utils import generate_toy_graph as generate_graph
 
 from toy_obj import Dual, DualFunction, DualGradient, DualHess
 from linear import make_shortest_path_matrix
@@ -70,8 +70,8 @@ if __name__ == "__main__":
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
     # =============================================================================
-    n_nodes = 20
-    n_instances = 1000
+    n_nodes = 4
+    n_instances = 300
     n_features = 5
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, n_instances=n_instances)
     n_targets = graph.number_of_edges()
@@ -81,10 +81,11 @@ if __name__ == "__main__":
     # constraint_matrix = 1.0 / self.x_size * np.ones((1, self.x_size)) # budget constraint
     # constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size)), axis=0) # box constraints
     # constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size), 1.0 / self.x_size * np.random.normal(size=(self.m_size - 2 * self.x_size, self.x_size))), axis=0) # box constraints with random constraints
-    # constraint_matrix = np.concatenate((np.array([[1,0,0,0,0,0], [0,0,1,0,0,0], [0,0,0,1,0,0], [0,0,0,0,1,0]]), np.array([[0,1,0,0,0,1]])), axis=0) # box constraints with random constraints
-    # attacker_budget = np.array([0.1,0.0,0.0,0.1] + [0.3])
-    n_constraints = 10
-    constraint_matrix, attacker_budget = random_constraints(n_targets, n_constraints)
+
+    constraint_matrix = np.concatenate((np.array([[1,0,0,0,0,0], [0,0,1,0,0,0], [0,0,0,1,0,0], [0,0,0,0,1,0]]), np.array([[0,1,0,0,0,1]])), axis=0) # box constraints with random constraints
+    attacker_budget = np.array([0.1,0.0,0.0,0.1] + [0.3])
+    # n_constraints = 10
+    # constraint_matrix, attacker_budget = random_constraints(n_targets, n_constraints)
 
     # =============================== data loading ================================
     print("generating data...")
