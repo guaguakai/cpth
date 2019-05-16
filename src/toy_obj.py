@@ -28,7 +28,7 @@ visualization = False
 verbose = True
 
 class Dual():
-    def __init__(self, model, x_size, theta_size, m_size, edge_size, phi_size, constraint_matrix):
+    def __init__(self, x_size, theta_size, m_size, edge_size, phi_size, constraint_matrix):
         self.x_size = x_size
         self.theta_size = theta_size
         self.lamb_size = m_size
@@ -38,7 +38,6 @@ class Dual():
         self.Q = 0.1 * np.eye(self.x_size)
         self.P = 0.05 * np.eye(self.theta_size)
         self.P_inv = np.linalg.inv(self.P)
-        self.model = model
         self.method = "SLSQP"
         # self.method = "Newton-CG"
         self.tol = 1e-3
@@ -49,29 +48,30 @@ class Dual():
         # self.constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size)), axis=0) # box constraints
         # self.constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size), 1.0 / self.x_size * np.random.normal(size=(self.m_size - 2 * self.x_size, self.x_size))), axis=0) # box constraints with random constraints
         # self.constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size), 0.1 * np.array([[0, 1, 0, 0, 1]])), axis=0) # box constraints with random constraints
-        self.constraint_matrix = constraint_matrix
+        self.constraint_matrix_np = np.array(constraint_matrix)
+        self.constraint_matrix = torch.Tensor(constraint_matrix)
 
         assert(self.m_size == self.constraint_matrix.shape[0])
 
         self.Q_extended = np.concatenate(
-                (-np.concatenate((self.Q + self.P_inv, self.P_inv @ self.constraint_matrix.transpose()), axis=1),
-                np.concatenate((self.constraint_matrix @ self.P_inv, -self.constraint_matrix @ self.P_inv @ self.constraint_matrix.transpose()), axis=1)),
+                (-np.concatenate((self.Q + self.P_inv, self.P_inv @ self.constraint_matrix_np.transpose()), axis=1),
+                np.concatenate((self.constraint_matrix_np @ self.P_inv, -self.constraint_matrix_np @ self.P_inv @ self.constraint_matrix_np.transpose()), axis=1)),
                 axis=0)
 
     def m(self, theta, phi, lib=np): # numpy inputs
         theta_bar = phi[:self.theta_size]
         r = phi[self.theta_size:]
         if lib == np:
-            return self.constraint_matrix @ (theta - theta_bar) - r
+            return self.constraint_matrix_np @ (theta - theta_bar) - r
         elif lib == torch:
-            return torch.Tensor(self.constraint_matrix) @ (theta - theta_bar) - r
+            return self.constraint_matrix @ (theta - theta_bar) - r
         # return (theta - phi) ** 2 - 3
 
     def dm_dphi(self, theta, phi, lib=np):
         if lib == np:
-            return -lib.concatenate((self.constraint_matrix, lib.eye(self.phi_size - self.theta_size)), axis=1)
+            return -lib.concatenate((self.constraint_matrix_np, lib.eye(self.phi_size - self.theta_size)), axis=1)
         elif lib == torch:
-            return -lib.cat((torch.Tensor(self.constraint_matrix), lib.eye(self.phi_size - self.theta_size)), dim=1)
+            return -lib.cat((self.constraint_matrix, lib.eye(self.phi_size - self.theta_size)), dim=1)
 
     def f(self, x, theta, lib=np): # default numpy inputs
         if lib == torch:
@@ -85,18 +85,18 @@ class Dual():
     def dual_solution(self, x, lamb, phi, lib=np):
         # theta_bar = phi[:self.x_size]
         if lib == np:
-            theta = self.P_inv @ (x - np.transpose(self.constraint_matrix) @ lamb)
+            theta = self.P_inv @ (x - np.transpose(self.constraint_matrix_np) @ lamb)
         elif lib == torch:
-            theta = torch.Tensor(self.P_inv) @ (x - torch.transpose(torch.Tensor(self.constraint_matrix), 0, 1) @ lamb)
+            theta = torch.Tensor(self.P_inv) @ (x - self.constraint_matrix.t() @ lamb)
         return theta
 
     def dtheta_dx(self, lib=np):
         if lib == np:
             P_inv_t = np.transpose(self.P_inv)
-            return np.concatenate((P_inv_t, P_inv_t @ np.transpose(self.constraint_matrix), np.zeros((self.theta_size, self.phi_size))), axis=1)
+            return np.concatenate((P_inv_t, P_inv_t @ np.transpose(self.constraint_matrix_np), np.zeros((self.theta_size, self.phi_size))), axis=1)
         elif lib == torch:
-            P_inv_t = torch.transpose(torch.Tensor(self.P_inv), 0, 1)
-            return torch.cat((P_inv_t, P_inv_t @ torch.transpose(torch.Tensor(self.constraint_matrix), 0, 1), torch.zeros((self.theta_size, self.phi_size))), dim=1)
+            P_inv_t = torch.Tensor(self.P_inv).t()
+            return torch.cat((P_inv_t, P_inv_t @ self.constraint_matrix.t(), torch.zeros((self.theta_size, self.phi_size))), dim=1)
 
     # ================ Lagrangian and gradient computing =================
     # entire input: x, lamb, phi, theta
@@ -118,8 +118,8 @@ class Dual():
         theta = entire_input[-self.theta_size:]
         dL_dx = -theta -self.Q @ x
         dL_dlamb = self.m(theta, phi)
-        dL_dphi = np.concatenate((np.transpose(self.constraint_matrix), -(np.concatenate((np.eye(self.x_size), np.eye(self.x_size)), axis=1))), axis=0) @ lamb # TODO error!!
-        dL_dtheta = -x + self.P @ theta + np.transpose(self.constraint_matrix) @ lamb
+        dL_dphi = np.concatenate((np.transpose(self.constraint_matrix_np), -(np.concatenate((np.eye(self.x_size), np.eye(self.x_size)), axis=1))), axis=0) @ lamb # TODO error!!
+        dL_dtheta = -x + self.P @ theta + np.transpose(self.constraint_matrix_np) @ lamb
         return np.concatenate((dL_dx, dL_dlamb, dL_dphi, dL_dtheta), axis=0)
 
     def L_hessp_single(self, entire_input, p):
@@ -135,7 +135,7 @@ class Dual():
         phi = entire_input[self.x_size + self.lamb_size : self.x_size + self.lamb_size + self.phi_size]
         theta = entire_input[-self.theta_size:]
 
-        dL_dtheta = -x + self.P @ theta + np.transpose(self.constraint_matrix) @ lamb
+        dL_dtheta = -x + self.P @ theta + np.transpose(self.constraint_matrix_np) @ lamb
         hess = self.P
         return hess
 
@@ -152,7 +152,7 @@ class Dual():
         theta = self.dual_solution(x, lamb, phi, lib=lib)
 
         if lib == np:
-            constraint_matrix = self.constraint_matrix
+            constraint_matrix = self.constraint_matrix_np
             dtheta_dx = self.dtheta_dx(lib=lib)
             dL_dx = -theta - self.Q @ x
             dL_dlamb = self.m(theta, phi, lib=lib)
@@ -163,13 +163,13 @@ class Dual():
             dg_dx = np.concatenate((dL_dx, dL_dlamb, dL_dphi)) + dL_dtheta @ dtheta_dx
 
         elif lib == torch:
-            constraint_matrix_torch = torch.Tensor(self.constraint_matrix)
+            constraint_matrix = self.constraint_matrix
             dtheta_dx = torch.Tensor(self.dtheta_dx(lib=lib))
             dL_dx = -theta - torch.Tensor(self.Q) @ x
             dL_dlamb = self.m(theta, phi, lib=torch)
             dL_dphi = self.dm_dphi(theta, phi, lib=lib).t() @ lamb # TODO error!!
             # dL_dphi = torch.cat((torch.transpose(constraint_matrix_torch, 0, 1), -(torch.cat((torch.eye(self.x_size), torch.eye(self.x_size)), dim=1))), dim=0) @ lamb # TODO error!!
-            dL_dtheta = -x + torch.Tensor(self.P) @ theta + torch.transpose(constraint_matrix_torch, 0,1) @ lamb
+            dL_dtheta = -x + torch.Tensor(self.P) @ theta + constraint_matrix.t() @ lamb
 
             dg_dx = torch.cat((dL_dx, dL_dlamb, dL_dphi)) + dL_dtheta @ dtheta_dx
         return dg_dx
