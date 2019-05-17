@@ -67,10 +67,10 @@ if __name__ == "__main__":
     device = torch.device("cuda" if use_cuda else "cpu")
     print(device)
 
-    kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
+    kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
     # =============================================================================
-    n_nodes = 50
+    n_nodes = 10
     n_instances = 500
     n_features = 5
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, n_instances=n_instances)
@@ -106,7 +106,10 @@ if __name__ == "__main__":
     learning_rate = 1e-4
     num_epochs = args.epochs
 
-
+    f_ts_loss = open("exp/ts/loss_0516.csv", "w")
+    f_ts_obj = open("exp/ts/obj_0516.csv", "w")
+    f_df_loss = open("exp/df/loss_0516.csv", "w")
+    f_df_obj = open("exp/df/obj_0516.csv", "w")
 
 
     # ==============================================================================
@@ -248,12 +251,14 @@ if __name__ == "__main__":
                 loss_list.append(loss.item())
                 obj_list.append(obj_value.item())
 
-                if batch_idx % 10 == 0 and verbose:
+                if (batch_idx+1) % 10 == 0 and verbose:
                     print('{} Epoch: {} [{}/{} ({:.0f}%)]\t Average Loss: {:.6f}, Average obj value: {}'.format(
-                        mode, epoch, batch_idx * len(features), len(data_loader),
+                        mode, epoch, (batch_idx+1) * len(features), len(data_loader),
                         100. * batch_idx / len(data_loader), np.mean(loss_list[-10:]), np.mean(obj_list[-10:])))
 
             print("Overall {} loss: {}, obj value: {}".format(mode, np.mean(loss_list), np.mean(obj_list)))
+            f_ts_loss.write("Epoch, {}, mode, {}, loss, {}, loss std, {} \n".format(epoch, mode, np.mean(loss_list), np.std(loss_list)))
+            f_ts_obj.write("Epoch, {}, mode, {}, obj values, {}, obj std, {} \n".format(epoch, mode, np.mean(obj_list), np.std(obj_list)))
 
 
     # ==============================================================================
@@ -410,12 +415,19 @@ if __name__ == "__main__":
                     optimizer.step()
                     batch_loss = 0
 
-                if batch_idx % 10 == 0 and verbose:
+                if (batch_idx+1) % 10 == 0 and verbose:
                     print('{} Epoch: {} [{}/{} ({:.0f}%)]\tAverage loss: {:.6f}, Average obj value: {}'.format(
-                        mode, epoch, batch_idx * len(features), len(data_loader),
+                        mode, epoch, (batch_idx+1) * len(features), len(data_loader),
                         100. * batch_idx / len(data_loader), np.mean(loss_list[-10:]), np.mean(obj_list[-10:])))
 
             print("Overall {} loss: {}, obj value: {}".format(mode, np.mean(loss_list), np.mean(obj_list)))
+            f_df_loss.write("Epoch, {}, mode, {}, loss, {}, loss std, {} \n".format(epoch, mode, np.mean(loss_list), np.std(loss_list)))
+            f_df_obj.write("Epoch, {}, mode, {}, obj values, {}, obj std, {} \n".format(epoch, mode, np.mean(obj_list), np.std(obj_list)))
+
+    f_ts_loss.close()
+    f_ts_obj.close()
+    f_df_loss.close()
+    f_df_obj.close()
 
         # # ======================= testing ==========================
         # testing_loss =[]
