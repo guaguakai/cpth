@@ -35,7 +35,7 @@ class Dual():
         self.m_size = m_size
         self.phi_size = phi_size
         self.edge_size = edge_size
-        self.Q = 0.1 * np.eye(self.x_size)
+        self.Q = 0.05 * np.eye(self.x_size)
         self.P = 0.05 * np.eye(self.theta_size)
         self.P_inv = np.linalg.inv(self.P)
         self.method = "SLSQP"

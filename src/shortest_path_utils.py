@@ -99,7 +99,7 @@ def generate_toy_graph(n_nodes=4, n_instances=300):
     g[1][3]['idx'] = 4
     g[2][3]['idx'] = 5
 
-    c = np.random.rand(g.number_of_edges())
+    c = np.zeros(g.number_of_edges())
     # source = 0
     # dest = 3
     source_list = np.array([0] * 100 + [0] * 100 + [2] * 100)
@@ -109,9 +109,14 @@ def generate_toy_graph(n_nodes=4, n_instances=300):
     return g, c, source_list, dest_list
 
 
-def load_toy_data(args, kwargs, g, latency, n_instances, n_features=1):
-    label1 = [0.3,0.2,0.0,0.0,0.3,0.2]
-    label2 = [0.3,0.2,0.0,0.0,0.3,0.2]
+def load_toy_data(args, kwargs, g, latency, n_instances, n_constraints=5, n_features=1, max_budget=1): # max budget is just a placeholder
+    assert(n_constraints == 5)
+    n_targets = g.number_of_edges()
+
+    label1 = [0.4,0.2,0.0,0.0,0.4,0.2]
+    label2 = [0.4,0.2,0.0,0.0,0.4,0.2]
+    constraint_matrix = np.concatenate((np.array([[1,0,0,0,0,0], [0,0,1,0,0,0], [0,0,0,1,0,0], [0,0,0,0,1,0], [0,1,0,0,0,1]]), -np.eye(n_targets))) # box constraints with random constraints
+    attacker_budgets = torch.cat((torch.Tensor([[0.0, 0.0, 0.0, 0.0, 0.3]] * n_instances), torch.zeros(n_instances, n_targets)), dim=1)
 
     features = torch.Tensor([[0.5] * n_features] * n_instances)
     labels = torch.Tensor([label1] * (int(n_instances/2)) + [label2] * (n_instances - int(n_instances/2)))
@@ -121,7 +126,7 @@ def load_toy_data(args, kwargs, g, latency, n_instances, n_features=1):
     train_size   = int(np.floor(dataset_size * 0.8))
     test_size    = dataset_size - train_size
 
-    entire_dataset = data_utils.TensorDataset(features, labels, torch.arange(dataset_size))
+    entire_dataset = data_utils.TensorDataset(features, labels, attacker_budgets, torch.arange(dataset_size))
     indices = list(range(dataset_size))
     np.random.shuffle(indices)
     train_indices = indices[:train_size]
@@ -130,7 +135,7 @@ def load_toy_data(args, kwargs, g, latency, n_instances, n_features=1):
     train_loader = data_utils.DataLoader(entire_dataset, batch_size=args.batch_size, **kwargs, sampler=SubsetRandomSampler(train_indices))
     test_loader  = data_utils.DataLoader(entire_dataset, batch_size=args.test_batch_size, **kwargs, sampler=SubsetRandomSampler(test_indices))
 
-    return train_loader, test_loader
+    return train_loader, test_loader, constraint_matrix
 
 
 def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=500, max_budget=1.0):
