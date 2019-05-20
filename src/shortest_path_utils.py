@@ -151,10 +151,13 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
         c = torch.zeros(num_samples, num_edges)
         for i in range(num_samples):
             for j in range(num_edges):
-                if random.random() < 0.2:
-                    c[i,j] = random.random() + 2
-                else:
-                    c[i,j] = 0.3*random.random() + 0.5
+                tmp = random.random()
+                if tmp < 0.2: # 20 % high rate
+                    c[i,j] = 2 * random.random() + 5
+                elif tmp < 0.5: # 30 % medium rate
+                    c[i,j] = 1 * random.random() + 3
+                else: # 50 % low rate
+                    c[i,j] = 0.3 * random.random() + 2
         return c
     
 #    c_train = torch.rand(n_train, g.number_of_edges())
@@ -162,7 +165,7 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
 
     # =========== generating constraints with budget ============
     budgets = torch.cat((max_budget * torch.rand((n_instances, n_constraints)), -torch.zeros(n_instances, n_targets)), dim=1)
-    constraint_matrix = torch.cat((torch.rand((n_constraints, n_targets)), -torch.eye(n_targets)), dim=0).numpy() # numpy matrix
+    constraint_matrix = torch.cat((torch.rand((n_constraints, n_targets)) * 0.3 + 0.7, -torch.eye(n_targets)), dim=0).numpy() # numpy matrix
 
     # ================== generating dataset =====================
     labels = (torch.Tensor(latency) + 0.1 * bimodal_random(n_instances, g.number_of_edges())).float()

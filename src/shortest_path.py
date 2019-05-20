@@ -43,8 +43,8 @@ if __name__ == "__main__":
                         help='input batch size for training (default: 1)')
     parser.add_argument('--test-batch-size', type=int, default=1, metavar='N',
                         help='input batch size for testing (default: 1)')
-    parser.add_argument('--epochs', type=int, default=50, metavar='N',
-                        help='number of epochs to train (default: 50)')
+    parser.add_argument('--epochs', type=int, default=100, metavar='N',
+                        help='number of epochs to train (default: 100)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     num_epochs = args.epochs
 
     nBatch = args.batch_size # for computing
-    batch_size = 5 # for loss back propagation
+    batch_size = 10 # for loss back propagation
     loss_fn = torch.nn.MSELoss()
 
     # ======================= setting for robust learning ==========================
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     print("Enable robust optimization: {}".format(robust_option))
 
     # ================================= filename ===================================
-    filename = "0519_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
+    filename = "0520_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
     f_ts_loss = open("exp/ts/loss_{}.csv".format(filename), "w")
     f_ts_obj = open("exp/ts/obj_{}.csv".format(filename), "w")
     f_df_loss = open("exp/df/loss_{}.csv".format(filename), "w")
@@ -181,7 +181,7 @@ if __name__ == "__main__":
                 mean = model_ts(features).view(nBatch, theta_size)
                 if robust_option:
                     variance = torch.zeros(nBatch, m_size).to(device)
-                    variance[:,:-n_targets] = uncertainty_model_ts(features).view(nBatch, m_size)[:,:-n_targets]
+                    variance[:,:-n_targets] = uncertainty_model_ts(features).view(nBatch, m_size)[:,:-n_targets] * max_budget
                     variance[:,-n_targets] = 0
                     loss = loss_fn(mean, labels) + loss_fn(variance, attacker_budgets)
                 else:
@@ -331,7 +331,7 @@ if __name__ == "__main__":
                 # mean = labels
                 if robust_option:
                     variance = torch.zeros(nBatch, m_size).to(device)
-                    variance[:,:-n_targets] = uncertainty_model(features).view(nBatch, m_size)[:,:-n_targets]
+                    variance[:,:-n_targets] = uncertainty_model(features).view(nBatch, m_size)[:,:-n_targets] * max_budget
                     variance[:,-n_targets] = 0
                     # mean = labels # FOR TESTING ONLY
                     # variance = attacker_budgets # FOR TESTING ONLY
