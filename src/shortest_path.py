@@ -43,8 +43,8 @@ if __name__ == "__main__":
                         help='input batch size for training (default: 1)')
     parser.add_argument('--test-batch-size', type=int, default=1, metavar='N',
                         help='input batch size for testing (default: 1)')
-    parser.add_argument('--epochs', type=int, default=10, metavar='N',
-                        help='number of epochs to train (default: 10)')
+    parser.add_argument('--epochs', type=int, default=50, metavar='N',
+                        help='number of epochs to train (default: 50)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
@@ -70,12 +70,12 @@ if __name__ == "__main__":
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
     # =============================================================================
-    n_nodes = 20
-    n_instances = 500
-    n_features = 5
+    n_nodes = 10
+    n_instances = 200
+    n_features = 3
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, n_instances=n_instances)
     n_targets = graph.number_of_edges()
-    n_constraints = 20
+    n_constraints = n_nodes
 
     # =============================== data loading ================================
     print("generating data...")
@@ -93,11 +93,11 @@ if __name__ == "__main__":
     tol = 1e-3
     method = "SLSQP"
     # method = "trust-constr"
-    learning_rate = 1e-3
+    learning_rate = 1e-4
     num_epochs = args.epochs
 
     nBatch = args.batch_size # for computing
-    batch_size = 10 # for loss back propagation
+    batch_size = 5 # for loss back propagation
     loss_fn = torch.nn.MSELoss()
 
     # ======================= setting for robust learning ==========================
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     print("Enable robust optimization: {}".format(robust_option))
 
     # ================================= filename ===================================
-    filename = "0517_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
+    filename = "0519_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
     f_ts_loss = open("exp/ts/loss_{}.csv".format(filename), "w")
     f_ts_obj = open("exp/ts/obj_{}.csv".format(filename), "w")
     f_df_loss = open("exp/df/loss_{}.csv".format(filename), "w")
@@ -405,7 +405,7 @@ if __name__ == "__main__":
                 loss_list.append(loss.item())
                 obj_list.append(obj_value.item())
 
-                batch_loss += obj_value # + loss
+                batch_loss += obj_value + loss
                 if obj_value < 0:
                     print("checking...")
                     print(labels)
