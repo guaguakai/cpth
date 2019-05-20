@@ -180,7 +180,9 @@ if __name__ == "__main__":
 
                 mean = model_ts(features).view(nBatch, theta_size)
                 if robust_option:
-                    variance = uncertainty_model_ts(features).view(nBatch, m_size)
+                    variance = torch.zeros(nBatch, m_size).to(device)
+                    variance[:,:-n_targets] = uncertainty_model_ts(features).view(nBatch, m_size)[:,:-n_targets]
+                    variance[:,-n_targets] = 0
                     loss = loss_fn(mean, labels) + loss_fn(variance, attacker_budgets)
                 else:
                     variance = torch.zeros(nBatch, m_size).to(device)
@@ -328,7 +330,9 @@ if __name__ == "__main__":
                 mean = model(features).view(nBatch, theta_size)
                 # mean = labels
                 if robust_option:
-                    variance = uncertainty_model(features).view(nBatch, m_size)
+                    variance = torch.zeros(nBatch, m_size).to(device)
+                    variance[:,:-n_targets] = uncertainty_model(features).view(nBatch, m_size)[:,:-n_targets]
+                    variance[:,-n_targets] = 0
                     # mean = labels # FOR TESTING ONLY
                     # variance = attacker_budgets # FOR TESTING ONLY
                     loss = loss_fn(mean, labels) + loss_fn(variance, attacker_budgets)
@@ -405,7 +409,7 @@ if __name__ == "__main__":
                 loss_list.append(loss.item())
                 obj_list.append(obj_value.item())
 
-                batch_loss += obj_value + loss
+                batch_loss += obj_value
                 if obj_value < 0:
                     print("checking...")
                     print(labels)
