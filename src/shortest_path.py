@@ -71,8 +71,8 @@ if __name__ == "__main__":
 
     # =============================================================================
     n_nodes = 10
-    n_instances = 200
-    n_features = 3
+    n_instances = 500
+    n_features = 5
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, n_instances=n_instances)
     n_targets = graph.number_of_edges()
     n_constraints = n_nodes
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     print("Enable robust optimization: {}".format(robust_option))
 
     # ================================= filename ===================================
-    filename = "0520_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
+    filename = "0522_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
     f_ts_loss = open("exp/ts/loss_{}.csv".format(filename), "w")
     f_ts_obj = open("exp/ts/obj_{}.csv".format(filename), "w")
     f_df_loss = open("exp/df/loss_{}.csv".format(filename), "w")

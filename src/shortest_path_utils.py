@@ -14,7 +14,7 @@ import pickle
 from linear import make_shortest_path_matrix
 
 # Random Seed Initialization
-SEED = random.randint(0,10000)
+SEED = 13141 # random.randint(0,10000)
 print("Random seed: {}".format(SEED))
 torch.manual_seed(SEED)
 np.random.seed(SEED)
