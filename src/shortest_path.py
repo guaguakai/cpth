@@ -43,8 +43,8 @@ if __name__ == "__main__":
                         help='input batch size for training (default: 1)')
     parser.add_argument('--test-batch-size', type=int, default=1, metavar='N',
                         help='input batch size for testing (default: 1)')
-    parser.add_argument('--epochs', type=int, default=100, metavar='N',
-                        help='number of epochs to train (default: 100)')
+    parser.add_argument('--epochs', type=int, default=50, metavar='N',
+                        help='number of epochs to train (default: 50)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
@@ -111,11 +111,12 @@ if __name__ == "__main__":
     print("Enable robust optimization: {}".format(robust_option))
 
     # ================================= filename ===================================
+    folder_path = "exp/robust/" if robust_option else "exp/nonrobust/"
     filename = "0522_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
-    f_ts_loss = open("exp/ts/loss_{}.csv".format(filename), "w")
-    f_ts_obj = open("exp/ts/obj_{}.csv".format(filename), "w")
-    f_df_loss = open("exp/df/loss_{}.csv".format(filename), "w")
-    f_df_obj = open("exp/df/obj_{}.csv".format(filename), "w")
+    f_ts_loss = open(folder_path + "ts/loss_{}.csv".format(filename), "w")
+    f_ts_obj  = open(folder_path + "ts/obj_{}.csv".format(filename), "w")
+    f_df_loss = open(folder_path + "df/loss_{}.csv".format(filename), "w")
+    f_df_obj  = open(folder_path + "df/obj_{}.csv".format(filename), "w")
 
 
     # ==============================================================================
