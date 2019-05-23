@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
     # =============================================================================
     n_nodes = 10
-    n_instances = 500
+    n_instances = 100
     n_features = 5
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, n_instances=n_instances)
     n_targets = graph.number_of_edges()
@@ -184,19 +184,10 @@ if __name__ == "__main__":
                     variance = torch.zeros(nBatch, m_size).to(device)
                     variance[:,:-n_targets] = uncertainty_model_ts(features).view(nBatch, m_size)[:,:-n_targets] * max_budget
                     variance[:,-n_targets] = 0
-                    loss = loss_fn(mean, labels) + loss_fn(variance, attacker_budgets)
                 else:
                     variance = torch.zeros(nBatch, m_size).to(device)
-                    loss = loss_fn(mean, labels) 
 
                 phis = torch.cat((mean, variance), dim=1).cpu().detach()
-                batch_loss += loss
-
-                if mode == "training" and batch_idx % batch_size == batch_size-1:
-                    optimizer.zero_grad()
-                    batch_loss.backward()
-                    optimizer.step()
-                    batch_loss = 0
 
                 def ineq_fun(x):
                     return G @ x[:x_size] - h
@@ -256,6 +247,18 @@ if __name__ == "__main__":
                 # print(new_xlamb_opt)
                 labels_modified = constrained_attack(new_x, labels, constraint_matrix, attacker_budgets)
                 obj_value = (labels_modified.view(labels_modified.shape[0], 1, labels.shape[1]).to("cpu") @ new_x.view(*new_x.shape, 1)).mean()
+
+                if robust_option:
+                    loss = loss_fn(mean, labels) + loss_fn(variance, attacker_budgets)
+                else:
+                    loss = loss_fn(mean, labels_modified) 
+
+                batch_loss += loss
+                if mode == "training" and batch_idx % batch_size == batch_size-1:
+                    optimizer.zero_grad()
+                    batch_loss.backward()
+                    optimizer.step()
+                    batch_loss = 0
 
                 loss_list.append(loss.item())
                 obj_list.append(obj_value.item())
@@ -336,10 +339,8 @@ if __name__ == "__main__":
                     variance[:,-n_targets] = 0
                     # mean = labels # FOR TESTING ONLY
                     # variance = attacker_budgets # FOR TESTING ONLY
-                    loss = loss_fn(mean, labels) + loss_fn(variance, attacker_budgets)
                 else:
                     variance = torch.zeros(nBatch, m_size).to(device)
-                    loss = loss_fn(mean, labels) 
 
                 phis = torch.cat((mean, variance), dim=1).cpu()
 
@@ -404,6 +405,11 @@ if __name__ == "__main__":
                 # print(new_xlamb_opt)
                 # print("label modified")
                 # print(labels_modified)
+
+                if robust_option:
+                    loss = loss_fn(mean, labels) + loss_fn(variance, attacker_budgets)
+                else:
+                    loss = loss_fn(mean, labels_modified) 
 
                 obj_value = (labels_modified.view(labels_modified.shape[0], 1, labels.shape[1]).to("cpu") @ new_x.view(*new_x.shape, 1)).mean().to(device)
 
