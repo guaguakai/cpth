@@ -34,6 +34,8 @@ from linear import make_shortest_path_matrix
 DTYPE = torch.float
 visualization = False
 verbose = True
+D_CONST = 0
+D_ABNORMAL = 30
 
 
 if __name__ == "__main__":
@@ -43,8 +45,8 @@ if __name__ == "__main__":
                         help='input batch size for training (default: 1)')
     parser.add_argument('--test-batch-size', type=int, default=1, metavar='N',
                         help='input batch size for testing (default: 1)')
-    parser.add_argument('--epochs', type=int, default=50, metavar='N',
-                        help='number of epochs to train (default: 50)')
+    parser.add_argument('--epochs', type=int, default=20, metavar='N',
+                        help='number of epochs to train (default: 20)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
@@ -55,6 +57,8 @@ if __name__ == "__main__":
                         help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
+    parser.add_argument('--nonrobust', dest='robust', action='store_false', default=True,
+                        help='disable robust learning')
 
     parser.add_argument('--save-model', action='store_true', default=True,
                         help='For Saving the current Model')
@@ -71,15 +75,16 @@ if __name__ == "__main__":
 
     # =============================================================================
     n_nodes = 10
-    n_instances = 100
-    n_features = 5
+    n_instances = 300
+    n_features = 10
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, n_instances=n_instances)
     n_targets = graph.number_of_edges()
     n_constraints = n_nodes
 
     # =============================== data loading ================================
     print("generating data...")
-    max_budget = 1.0
+    max_budget = 3.0
+    max_latency = 5.0
     train_loader, test_loader, constraint_matrix = load_data(args, kwargs, graph, latency, n_instances, n_constraints, n_features=n_features, max_budget=max_budget)
 
     edge_size = n_targets
@@ -93,7 +98,7 @@ if __name__ == "__main__":
     tol = 1e-3
     method = "SLSQP"
     # method = "trust-constr"
-    learning_rate = 1e-4
+    learning_rate = 1e-3
     num_epochs = args.epochs
 
     nBatch = args.batch_size # for computing
@@ -107,7 +112,7 @@ if __name__ == "__main__":
     #                   #   #   #   #   #  #   #   #       #    #
     #                   #   #    ###    ###     ###     ###     #
     # ==============================================================================
-    robust_option = True
+    robust_option = args.robust
     print("Enable robust optimization: {}".format(robust_option))
 
     # ================================= filename ===================================
@@ -143,11 +148,11 @@ if __name__ == "__main__":
     print("training two stage...")
     optimizer = optim.Adam(list(model_ts.parameters()) + list(uncertainty_model_ts.parameters()), lr=learning_rate)
 
-    for epoch in tqdm.trange(num_epochs):
+    for epoch in tqdm.trange(-2, num_epochs):
         for mode in ["training", "testing"]:
             print("{}...".format(mode))
             data_loader = train_loader if mode == "training" else test_loader
-            if mode == "training":
+            if mode == "training" and epoch >= 0:
                 model_ts.train()
                 uncertainty_model_ts.train()
             else:
@@ -168,7 +173,7 @@ if __name__ == "__main__":
 
                 newG = np.pad(G, ((0, lamb_size), (0, lamb_size)), "constant", constant_values=0)
                 newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
-                newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
+                newh = np.pad(h, (0, lamb_size), "constant", constant_values=D_CONST)
                 newA = np.pad(A, ((0,0), (0, lamb_size)), "constant", constant_values=0)
                 newb = b # np.pad(b, (0, lamb_size), "constant", constant_values=0)
 
@@ -179,8 +184,11 @@ if __name__ == "__main__":
 
                 # -------------------- prediction ----------------------
 
-                mean = model_ts(features).view(nBatch, theta_size)
-                if robust_option:
+                mean = model_ts(features).view(nBatch, theta_size) * max_latency
+                if epoch == -2: # check the optimal performance
+                    mean = labels
+                    variance = attacker_budgets
+                elif robust_option:
                     variance = torch.zeros(nBatch, m_size).to(device)
                     variance[:,:-n_targets] = uncertainty_model_ts(features).view(nBatch, m_size)[:,:-n_targets] * max_budget
                     variance[:,-n_targets] = 0
@@ -229,11 +237,11 @@ if __name__ == "__main__":
                 xlamb = torch.Tensor(res.x).view(1, x_size + lamb_size)
 
                 hess = -dual_hess.hess(xlamb, phis)
-                regularization_term = 0.01 * torch.eye(hess.shape[-1])
+                regularization_term = 0.1 * torch.eye(hess.shape[-1])
                 Q = hess + regularization_term
 
                 jac = -dual_gradient(xlamb, phis)[:,:x_size + lamb_size]
-                p = (jac.view(1, -1) - torch.matmul(xlamb, Q)).squeeze()
+                p = (jac.view(1, -1).detach() - torch.matmul(xlamb, Q)).squeeze()
                 
                 qp_solver = qpth.qp.QPFunction()
                 # qp_solver = qpthlocal.qp.QPFunction(verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI, zhats=xlamb)
@@ -241,12 +249,24 @@ if __name__ == "__main__":
                 new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
                 new_x = new_xlamb_opt[:,:x_size]
 
-                # print("Old xlamb")
-                # print(xlamb)
-                # print("New xlamb")
-                # print(new_xlamb_opt)
                 labels_modified = constrained_attack(new_x, labels, constraint_matrix, attacker_budgets)
                 obj_value = (labels_modified.view(labels_modified.shape[0], 1, labels.shape[1]).to("cpu") @ new_x.view(*new_x.shape, 1)).mean()
+
+                if obj_value > D_ABNORMAL:
+                    print("ABNORMAL!!")
+                    print(source, dest)
+                    print("mean: {}, var: {}".format(mean, variance))
+                    print("label: {}, attacker budget: {}".format(labels, attacker_budgets))
+                    print("Old xlamb")
+                    print(xlamb)
+                    print("New xlamb")
+                    print(new_xlamb_opt)
+                    print(labels_modified)
+
+                if torch.any(obj_value < - D_CONST):
+                    print("checking...")
+                    print(labels)
+                    print(new_x)
 
                 if robust_option:
                     loss = loss_fn(mean, labels) + loss_fn(variance, attacker_budgets)
@@ -254,7 +274,7 @@ if __name__ == "__main__":
                     loss = loss_fn(mean, labels_modified) 
 
                 batch_loss += loss
-                if mode == "training" and batch_idx % batch_size == batch_size-1:
+                if mode == "training" and epoch >= 0 and batch_idx % batch_size == batch_size-1:
                     optimizer.zero_grad()
                     batch_loss.backward()
                     optimizer.step()
@@ -294,12 +314,12 @@ if __name__ == "__main__":
     print("end-to-end training...")
     optimizer = optim.Adam(list(model.parameters()) + list(uncertainty_model.parameters()), lr=learning_rate)
     
-    for epoch in tqdm.trange(num_epochs):
+    for epoch in tqdm.trange(-1, num_epochs):
         # ======================= training and testing ==========================
         for mode in ["training", "testing"]:
             print("{}...".format(mode))
             data_loader = train_loader if mode == "training" else test_loader
-            if mode == "training":
+            if mode == "training" and epoch >= 0:
                 model.train()
                 uncertainty_model.train()
             else:
@@ -320,7 +340,7 @@ if __name__ == "__main__":
 
                 newG = np.pad(G, ((0, lamb_size), (0, lamb_size)), "constant", constant_values=0)
                 newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
-                newh = np.pad(h, (0, lamb_size), "constant", constant_values=0)
+                newh = np.pad(h, (0, lamb_size), "constant", constant_values=D_CONST)
                 newA = np.pad(A, ((0,0), (0, lamb_size)), "constant", constant_values=0)
                 newb = b # np.pad(b, (0, lamb_size), "constant", constant_values=0)
 
@@ -331,9 +351,12 @@ if __name__ == "__main__":
 
                 # -------------------- prediction ----------------------
 
-                mean = model(features).view(nBatch, theta_size)
+                mean = model(features).view(nBatch, theta_size) * max_latency
                 # mean = labels
-                if robust_option:
+                if epoch == -2: # check the optimal performance
+                    mean = labels
+                    variance = attacker_budgets
+                elif robust_option:
                     variance = torch.zeros(nBatch, m_size).to(device)
                     variance[:,:-n_targets] = uncertainty_model(features).view(nBatch, m_size)[:,:-n_targets] * max_budget
                     variance[:,-n_targets] = 0
@@ -413,17 +436,28 @@ if __name__ == "__main__":
 
                 obj_value = (labels_modified.view(labels_modified.shape[0], 1, labels.shape[1]).to("cpu") @ new_x.view(*new_x.shape, 1)).mean().to(device)
 
+                if obj_value > D_ABNORMAL:
+                    print("ABNORMAL!!")
+                    print(source, dest)
+                    print("mean: {}, var: {}".format(mean, variance))
+                    print("label: {}, attacker budget: {}".format(labels, attacker_budgets))
+                    print("Old xlamb")
+                    print(xlamb)
+                    print("New xlamb")
+                    print(new_xlamb_opt)
+                    print(labels_modified)
+
+                if torch.any(obj_value < - D_CONST):
+                    print("checking...")
+                    print(labels)
+                    print(new_x)
+
                 loss_list.append(loss.item())
                 obj_list.append(obj_value.item())
 
                 batch_loss += obj_value
-                if obj_value < 0:
-                    print("checking...")
-                    print(labels)
-                    print(new_x)
-                # print("Training loss: {}".format(loss))
 
-                if mode == "training" and (batch_idx % batch_size) == batch_size-1:
+                if mode == "training" and epoch >= 0 and (batch_idx % batch_size) == batch_size-1:
                     optimizer.zero_grad()
                     batch_loss.backward()
                     optimizer.step()

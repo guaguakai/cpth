@@ -164,7 +164,7 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
 #    c_test = torch.rand(n_test, g.number_of_edges())
 
     # =========== generating constraints with budget ============
-    budgets = torch.cat((0.5 * max_budget * torch.rand((n_instances, n_constraints)) + 0.5 * max_budget, -torch.zeros(n_instances, n_targets)), dim=1)
+    budgets = torch.cat((max_budget * torch.rand((n_instances, n_constraints)), -torch.zeros(n_instances, n_targets)), dim=1)
     constraint_matrix = torch.cat((torch.randint(high=2, size=(n_constraints, n_targets)).float(), -torch.eye(n_targets)), dim=0).numpy() # numpy matrix
     assert(np.any(np.sum(constraint_matrix[:,:-n_targets], axis=0) == 0) == False) # make sure every entry is covered
 

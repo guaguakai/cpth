@@ -5,6 +5,8 @@ from qpth.qp import QPSolvers
 import numpy as np
 import networkx as nx
 
+D_CONST = 0
+
 def make_shortest_path_matrix(g, s, t):
     '''
     For a given graph g, produce a constraint matrix for the flow 
@@ -13,8 +15,8 @@ def make_shortest_path_matrix(g, s, t):
     import sympy
     A = np.zeros((g.number_of_nodes()+2, g.number_of_edges()))
     b = np.zeros((g.number_of_nodes())+2)
-    G = np.zeros((g.number_of_edges(), g.number_of_edges()))
-    h = np.zeros((g.number_of_edges()))
+    G = np.zeros((g.number_of_edges() * 2, g.number_of_edges()))
+    h = np.concatenate((np.zeros(g.number_of_edges()), np.ones(g.number_of_edges())))
     #flow conservation constraints
     for v in g:
         if v != s and v != t:
@@ -38,6 +40,7 @@ def make_shortest_path_matrix(g, s, t):
     #non-negativity constraints
     for u,v in g.edges():
         G[g[u][v]['idx'], g[u][v]['idx']] = -1
+        G[g[u][v]['idx'] + g.number_of_edges(), g[u][v]['idx']] = 1
     
     #check for linearly dependent rows and remove them
     _, inds = sympy.Matrix(A).T.rref()
