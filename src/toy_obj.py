@@ -35,12 +35,12 @@ class Dual():
         self.m_size = m_size
         self.phi_size = phi_size
         self.edge_size = edge_size
-        self.Q = 0.05 * np.eye(self.x_size)
-        self.P = 0.05 * np.eye(self.theta_size)
+        self.Q = 0.1 * np.eye(self.x_size)
+        self.P = 0.1 * np.eye(self.theta_size)
         self.P_inv = np.linalg.inv(self.P)
         self.method = "SLSQP"
         # self.method = "Newton-CG"
-        self.tol = 1e-3
+        self.tol = 1e-4
         self.M = 1e3
         self.theta_bounds = [(-self.M,self.M)] * self.theta_size
         # self.constraint_matrix = 1.0 / self.x_size * np.random.normal(size=(self.m_size, self.x_size)) # random constraints
@@ -93,10 +93,10 @@ class Dual():
     def dtheta_dx(self, lib=np):
         if lib == np:
             P_inv_t = np.transpose(self.P_inv)
-            return np.concatenate((P_inv_t, P_inv_t @ np.transpose(self.constraint_matrix_np), np.zeros((self.theta_size, self.phi_size))), axis=1)
+            return np.concatenate((P_inv_t, - P_inv_t @ np.transpose(self.constraint_matrix_np), np.zeros((self.theta_size, self.phi_size))), axis=1) # TODO to check
         elif lib == torch:
             P_inv_t = torch.Tensor(self.P_inv).t()
-            return torch.cat((P_inv_t, P_inv_t @ self.constraint_matrix.t(), torch.zeros((self.theta_size, self.phi_size))), dim=1)
+            return torch.cat((P_inv_t, - P_inv_t @ self.constraint_matrix.t(), torch.zeros((self.theta_size, self.phi_size))), dim=1)
 
     # ================ Lagrangian and gradient computing =================
     # entire input: x, lamb, phi, theta
@@ -108,42 +108,37 @@ class Dual():
         L = -self.f(x, theta) + np.dot(lamb, self.m(theta, phi))
         return L
 
-    def L_gradient_single(self, entire_input):
-        return autograd.grad(self.L_single)(entire_input)
+    # def L_gradient_single(self, entire_input):
+    #     return autograd.grad(self.L_single)(entire_input)
 
-    def L_gradient_single_direct(self, entire_input, lib=np):
-        x = entire_input[:self.x_size]
-        lamb = entire_input[self.x_size : self.x_size + self.lamb_size]
-        phi = entire_input[self.x_size + self.lamb_size : self.x_size + self.lamb_size + self.phi_size]
-        theta = entire_input[-self.theta_size:]
-        dL_dx = -theta -self.Q @ x
-        dL_dlamb = self.m(theta, phi)
-        dL_dphi = np.concatenate((np.transpose(self.constraint_matrix_np), -(np.concatenate((np.eye(self.x_size), np.eye(self.x_size)), axis=1))), axis=0) @ lamb # TODO error!!
-        dL_dtheta = -x + self.P @ theta + np.transpose(self.constraint_matrix_np) @ lamb
-        return np.concatenate((dL_dx, dL_dlamb, dL_dphi, dL_dtheta), axis=0)
+    # def L_gradient_single_direct(self, entire_input, lib=np):
+    #     x = entire_input[:self.x_size]
+    #     lamb = entire_input[self.x_size : self.x_size + self.lamb_size]
+    #     phi = entire_input[self.x_size + self.lamb_size : self.x_size + self.lamb_size + self.phi_size]
+    #     theta = entire_input[-self.theta_size:]
+    #     dL_dx = -theta -self.Q @ x
+    #     dL_dlamb = self.m(theta, phi)
+    #     # dL_dphi = np.concatenate((np.transpose(self.constraint_matrix_np), -(np.concatenate((np.eye(self.x_size), np.eye(self.x_size)), axis=1))), axis=0) @ lamb # TODO error!!
+    #     dL_dphi = np.concatenate((np.transpose(self.constraint_matrix_np) @ lamb, -lamb), axis=0) # TODO modified on 5/23, to be checked
+    #     dL_dtheta = -x + self.P @ theta + np.transpose(self.constraint_matrix_np) @ lamb
+    #     return np.concatenate((dL_dx, dL_dlamb, dL_dphi, dL_dtheta), axis=0)
 
-    def L_hessp_single(self, entire_input, p):
-        L_gradientp = lambda x: np.dot(p, self.L_gradient_single_direct(entire_input))
-        return autograd.grad(L_gradientp)(entire_input)
+    # def L_hessp_single(self, entire_input, p):
+    #     L_gradientp = lambda x: np.dot(p, self.L_gradient_single_direct(entire_input))
+    #     return autograd.grad(L_gradientp)(entire_input)
 
-    def L_hess_single(self, entire_input):
-        return autograd.jacobian(self.L_gradient_single_direct)(entire_input)
+    # def L_hess_single(self, entire_input):
+    #     return autograd.jacobian(self.L_gradient_single_direct)(entire_input)
 
-    def L_theta_hess(self, entire_input):
-        x = entire_input[:self.x_size]
-        lamb = entire_input[self.x_size : self.x_size + self.lamb_size]
-        phi = entire_input[self.x_size + self.lamb_size : self.x_size + self.lamb_size + self.phi_size]
-        theta = entire_input[-self.theta_size:]
+    # def L_theta_hess(self, entire_input):
+    #     x = entire_input[:self.x_size]
+    #     lamb = entire_input[self.x_size : self.x_size + self.lamb_size]
+    #     phi = entire_input[self.x_size + self.lamb_size : self.x_size + self.lamb_size + self.phi_size]
+    #     theta = entire_input[-self.theta_size:]
 
-        dL_dtheta = -x + self.P @ theta + np.transpose(self.constraint_matrix_np) @ lamb
-        hess = self.P
-        return hess
-
-    def L_dtheta_dx(self, entire_input):
-        x = entire_input[:self.x_size]
-        lamb = entire_input[self.x_size : self.x_size + self.lamb_size]
-        phi = entire_input[self.x_size + self.lamb_size : self.x_size + self.lamb_size + self.phi_size]
-        theta = entire_input[-self.theta_size:]
+    #     dL_dtheta = -x + self.P @ theta + np.transpose(self.constraint_matrix_np) @ lamb
+    #     hess = self.P
+    #     return hess
 
     def g_gradient_torch(self, entire_input, phi, lib=np):
         x = entire_input[:self.x_size]
@@ -157,7 +152,6 @@ class Dual():
             dL_dx = -theta - self.Q @ x
             dL_dlamb = self.m(theta, phi, lib=lib)
             dL_dphi = np.transpose(self.dm_dphi(theta, phi, lib=lib)) @ lamb # TODO error!!
-            # dL_dphi = np.concatenate((np.transpose(constraint_matrix), -(np.concatenate((np.eye(self.x_size), np.eye(self.x_size)), axis=1))), axis=0) @ lamb # TODO error!!
             dL_dtheta = -x + self.P @ theta + np.transpose(constraint_matrix) @ lamb
 
             dg_dx = np.concatenate((dL_dx, dL_dlamb, dL_dphi)) + dL_dtheta @ dtheta_dx
@@ -168,7 +162,6 @@ class Dual():
             dL_dx = -theta - torch.Tensor(self.Q) @ x
             dL_dlamb = self.m(theta, phi, lib=torch)
             dL_dphi = self.dm_dphi(theta, phi, lib=lib).t() @ lamb # TODO error!!
-            # dL_dphi = torch.cat((torch.transpose(constraint_matrix_torch, 0, 1), -(torch.cat((torch.eye(self.x_size), torch.eye(self.x_size)), dim=1))), dim=0) @ lamb # TODO error!!
             dL_dtheta = -x + torch.Tensor(self.P) @ theta + constraint_matrix.t() @ lamb
 
             dg_dx = torch.cat((dL_dx, dL_dlamb, dL_dphi)) + dL_dtheta @ dtheta_dx

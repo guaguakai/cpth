@@ -1,0 +1,4 @@
+Epoch, -2, mode, training, obj values, 4.9717005148530005, obj std, 3.1757249110104686 
+Epoch, -2, mode, testing, obj values, 5.691925251483918, obj std, 4.051681264986649 
+Epoch, -1, mode, training, obj values, 5.229575230181217, obj std, 3.384493023546774 
+Epoch, -1, mode, testing, obj values, 5.887175351381302, obj std, 4.232381546769191 

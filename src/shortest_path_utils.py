@@ -14,7 +14,7 @@ import pickle
 from linear import make_shortest_path_matrix
 
 # Random Seed Initialization
-SEED = random.randint(0,10000)
+SEED = 1029 # random.randint(0,10000)
 print("Random seed: {}".format(SEED))
 torch.manual_seed(SEED)
 np.random.seed(SEED)
@@ -40,7 +40,7 @@ def make_fc(num_features, num_targets, num_layers = 1, intermediate_size = 50, a
         return nn.Sequential(nn.Linear(num_features, num_targets), nn.Sigmoid())
 
 class Net(nn.Module):
-    def __init__(self, n_features, n_targets, intermediate_size = 50):
+    def __init__(self, n_features, n_targets, intermediate_size = 100):
         super(Net, self).__init__()
         self.num_features = n_features # TODO
         self.num_targets = n_targets
@@ -64,7 +64,7 @@ def generate_graph(n_nodes=100, n_instances=300, seed=SEED):
     while not generation_succeed:
         original_graph = nx.random_geometric_graph(n_nodes, 0.20)
         g = nx.DiGraph(original_graph)
-        c = np.random.rand(g.number_of_edges())
+        c = np.zeros(g.number_of_edges())
         for idx, (u,v) in enumerate(g.edges()):
             g[u][v]['idx'] = idx
             g[u][v]['weight'] = c[idx]
@@ -152,21 +152,22 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
         for i in range(num_samples):
             for j in range(num_edges):
                 tmp = random.random()
-                if tmp < 0.2: # 20 % high rate
-                    c[i,j] = 1 * random.random() + 4
-                elif tmp < 0.5: # 30 % medium rate
-                    c[i,j] = 1 * random.random() + 2
+                if tmp < 0.5: # 50 % high rate
+                    c[i,j] = 4 + random.random()
                 else: # 50 % low rate
-                    c[i,j] = 0.5 * random.random() + 0.5
+                    c[i,j] = 0.5 * random.random()
         return c
     
 #    c_train = torch.rand(n_train, g.number_of_edges())
 #    c_test = torch.rand(n_test, g.number_of_edges())
 
     # =========== generating constraints with budget ============
-    budgets = torch.cat((0.5 * max_budget * torch.rand((n_instances, n_constraints)) + 0.5 * max_budget, -torch.zeros(n_instances, n_targets)), dim=1)
-    constraint_matrix = torch.cat((torch.randint(high=2, size=(n_constraints, n_targets)).float(), -torch.eye(n_targets)), dim=0).numpy() # numpy matrix
-    assert(np.any(np.sum(constraint_matrix[:,:-n_targets], axis=0) == 0) == False) # make sure every entry is covered
+    budgets = torch.cat((max_budget * torch.rand((n_instances, n_constraints)), -torch.zeros(n_instances, n_targets)), dim=1)
+    while True:
+        constraint_matrix = np.concatenate((np.random.choice(2, size=(n_constraints, n_targets), p=[1-2.0/n_constraints,2.0/n_constraints]), -np.eye(n_targets)), axis=0) # numpy matrix
+        if (np.any(np.sum(constraint_matrix[:-n_targets,:], axis=0) == 0) == False): break # make sure every entry is covered
+
+    assert(np.any(np.sum(constraint_matrix[:-n_targets,:], axis=0) == 0) == False) # make sure every entry is covered
 
     # ================== generating dataset =====================
     labels = (torch.Tensor(latency) + bimodal_random(n_instances, g.number_of_edges())).float()
@@ -415,7 +416,7 @@ def constrained_attack(decisions, labels, constraint_matrix, attacker_budget): #
         model.params.OutputFlag=0
         model.params.TuneOutput=0
 
-        deltas = model.addVars(n, vtype=[GRB.CONTINUOUS]*n, lb=-theta)
+        deltas = model.addVars(n, vtype=[GRB.CONTINUOUS]*n, lb=0)
         for j in range(m_size):
             model.addConstr(LinExpr(constraint_matrix[j], [deltas[k] for k in range(n)]) <= r[j])
 
