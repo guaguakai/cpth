@@ -75,8 +75,8 @@ if __name__ == "__main__":
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
     # =============================================================================
-    n_nodes = 20
-    n_instances = 300
+    n_nodes = 10
+    n_instances = 1000
     n_features = 10
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, n_instances=n_instances)
     n_targets = graph.number_of_edges()
