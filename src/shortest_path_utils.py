@@ -20,7 +20,7 @@ torch.manual_seed(SEED)
 np.random.seed(SEED)
 random.seed(SEED)
 
-def make_fc(num_features, num_targets, num_layers = 1, intermediate_size = 50, activation = 'relu'):
+def make_fc(num_features, num_targets, num_layers = 1, intermediate_size = 200, activation = 'relu'):
     if num_layers > 1:
         if activation == 'relu':
             activation_fn = nn.ReLU
@@ -40,7 +40,7 @@ def make_fc(num_features, num_targets, num_layers = 1, intermediate_size = 50, a
         return nn.Sequential(nn.Linear(num_features, num_targets), nn.Sigmoid())
 
 class Net(nn.Module):
-    def __init__(self, n_features, n_targets, intermediate_size = 100):
+    def __init__(self, n_features, n_targets, intermediate_size = 200):
         super(Net, self).__init__()
         self.num_features = n_features # TODO
         self.num_targets = n_targets

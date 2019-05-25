@@ -76,8 +76,8 @@ if __name__ == "__main__":
 
     # =============================================================================
     n_nodes = 10
-    n_instances = 1000
-    n_features = 10
+    n_instances = 200
+    n_features = 100
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, n_instances=n_instances)
     n_targets = graph.number_of_edges()
     n_constraints = 5
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     # ================================= filename ===================================
     folder_path = "exp/robust/" if robust_option else "exp/nonrobust/"
-    filename = "0523_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
+    filename = "0524_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
     f_ts_loss = open(folder_path + "ts/loss_{}.csv".format(filename), "w")
     f_ts_obj  = open(folder_path + "ts/obj_{}.csv".format(filename), "w")
     f_df_loss = open(folder_path + "df/loss_{}.csv".format(filename), "w")
