@@ -85,7 +85,7 @@ if __name__ == "__main__":
     # =============================== data loading ================================
     print("generating data...")
     max_budget  = 0.5
-    max_latency = 0.5
+    max_latency = 5.0
     train_loader, test_loader, constraint_matrix = load_data(args, kwargs, graph, latency, n_instances, n_constraints, n_features=n_features, max_budget=max_budget)
 
     edge_size = n_targets
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     tol = 1e-3
     method = "SLSQP"
     # method = "trust-constr"
-    learning_rate = args.lr
+    learning_rate = float(args.lr)
     num_epochs = args.epochs
 
     nBatch = args.batch_size # for computing
