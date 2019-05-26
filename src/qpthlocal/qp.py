@@ -1,6 +1,5 @@
 import torch
 from torch.autograd import Function
-import numpy as np
 
 from .util import bger, expandParam, extract_nBatch
 from . import solvers
@@ -135,11 +134,10 @@ class QPSolvers(Enum):
     GUROBI = 3
     CUSTOM = 4
     SSG = 5
-    ROBUST = 6
 
 
 class QPFunction(Function):
-    def __init__(self, zhats, eps=1e-12, verbose=0, notImprovedLim=3,
+    def __init__(self, zhats, nus, lams, slacks, eps=1e-12, verbose=0, notImprovedLim=3,
                  maxIter=20, solver=QPSolvers.PDIPM_BATCHED, model_params = None, custom_solver=None):
         self.eps = eps
         self.verbose = verbose
@@ -148,6 +146,9 @@ class QPFunction(Function):
         self.solver = solver
         self.custom_solver = custom_solver
         self.zhats = zhats
+        self.nus = nus
+        self.lams = lams
+        self.slacks = slacks
 #        self.constant_constraints = constant_constraints
 
         if model_params is not None:
@@ -244,10 +245,7 @@ class QPFunction(Function):
             vals = torch.Tensor(nBatch).type_as(Q)
             zhats = torch.Tensor(nBatch, self.nz).type_as(Q)
             lams = torch.Tensor(nBatch, self.nineq).type_as(Q)
-            if self.neq > 0:
-                nus = torch.Tensor(nBatch, self.neq).type_as(Q)
-            else:
-                nus = torch.Tensor().type_as(Q)
+            nus = torch.Tensor(nBatch, self.neq).type_as(Q)
             slacks = torch.Tensor(nBatch, self.nineq).type_as(Q)
             for i in range(nBatch):
                 Ai, bi = (A[i], b[i]) if neq > 0 else (None, None)
@@ -330,43 +328,6 @@ class QPFunction(Function):
         elif self.solver == QPSolvers.SSG:
             zhats = self.zhats
             # zhats = self.zhats
-        elif self.solver == QPSolvers.ROBUST:
-            zhats = self.zhats
-            lams = torch.Tensor(nBatch, self.nineq).type_as(Q)
-            slacks = torch.Tensor(nBatch, self.nineq).type_as(Q)
-            if self.neq > 0:
-                nus = torch.Tensor(nBatch, self.neq).type_as(Q)
-            for i in range(nBatch):
-                Ai, bi = (A[i], b[i]) if neq > 0 else (None, None)
-                Gi, hi = G[i], h[i]
-                
-                zhat = zhats[i,:]
-                slacks[i] = hi - torch.matmul(Gi, zhat)
-
-                Qx_plus_P= torch.matmul(Q[i], zhat) + p[i]
-                
-                if neq > 0:
-                    bigA=torch.cat(
-                            ( torch.cat((torch.t(Ai), torch.t(Gi)), dim=1),
-                              torch.cat((torch.zeros(len(Gi), len(Ai)), torch.diag(slacks[i])), dim=1)
-                            ) , dim=0)
-                else:
-                    bigA=torch.cat(
-                            (torch.t(Gi), torch.diag(slacks[i]))
-                            , dim=0)
-
-                bigB= torch.cat( (-Qx_plus_P,  torch.zeros(len(slacks[i]))) , dim=0)
-                print(bigA.shape)
-                print(bigB.shape)
-                print(slacks[i])
-                
-                nu_lams = torch.Tensor(np.linalg.solve(bigA.numpy(), bigB.numpy()))
-                
-                
-                self.nus[i]= nu_lams[:len(Ai)]
-                self.lams[i]= nu_lams[-len(slacks[i]):]
-                self.slacks[i]=slacks[i]
-
         else:
             assert False
 

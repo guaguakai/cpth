@@ -20,7 +20,7 @@ import sys
 import pickle
 import copy
 
-from matching_utils import Net, load_data, make_matching_matrix
+# from matching_utils import Net, load_data, make_matching_matrix
 
 DTYPE = torch.float
 DEVICE = torch.device("cpu")
@@ -35,14 +35,14 @@ class Dual():
         self.m_size = m_size
         self.phi_size = phi_size
         self.edge_size = edge_size
-        self.Q = 0.1 * np.eye(self.x_size)
-        self.P = 0.1 * np.eye(self.theta_size)
+        self.Q = 0.01 * np.eye(self.x_size)     # The larger the Q and P, the more relaxation effect to the final obj. Of course, it is also more stable.
+        self.P = 0.01 * np.eye(self.theta_size)
         self.P_inv = np.linalg.inv(self.P)
         self.method = "SLSQP"
         # self.method = "Newton-CG"
         self.tol = 1e-4
-        self.M = 1e3
-        self.theta_bounds = [(-self.M,self.M)] * self.theta_size
+        # self.M = 1e3
+        # self.theta_bounds = [(-self.M,self.M)] * self.theta_size
         # self.constraint_matrix = 1.0 / self.x_size * np.random.normal(size=(self.m_size, self.x_size)) # random constraints
         # self.constraint_matrix = 1.0 / self.x_size * np.ones((1, self.x_size)) # budget constraint
         # self.constraint_matrix = np.concatenate((np.eye(self.x_size), -np.eye(self.x_size)), axis=0) # box constraints

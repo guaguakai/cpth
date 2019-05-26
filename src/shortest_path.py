@@ -34,9 +34,10 @@ from linear import make_shortest_path_matrix
 DTYPE = torch.float
 visualization = False
 verbose = True
-verbose_debug = False
+verbose_debug = True
 D_CONST = 0
 D_ABNORMAL = 1.0
+D_EPSILON = 1.0
 
 
 if __name__ == "__main__":
@@ -76,16 +77,16 @@ if __name__ == "__main__":
 
     # =============================================================================
     n_nodes = 10
-    n_instances = 200
+    n_instances = 1000
     n_features = 100
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, n_instances=n_instances)
     n_targets = graph.number_of_edges()
-    n_constraints = 5
+    n_constraints = 20
 
     # =============================== data loading ================================
     print("generating data...")
     max_budget  = 0.5
-    max_latency = 5.0
+    max_latency = 0.5
     train_loader, test_loader, constraint_matrix = load_data(args, kwargs, graph, latency, n_instances, n_constraints, n_features=n_features, max_budget=max_budget)
 
     edge_size = n_targets
@@ -95,7 +96,7 @@ if __name__ == "__main__":
     m_size = len(constraint_matrix)
     lamb_size  = m_size
     phi_size = edge_size + m_size
-    M = 10
+    M = 1e3
     tol = 1e-3
     method = "SLSQP"
     # method = "trust-constr"
@@ -118,7 +119,7 @@ if __name__ == "__main__":
 
     # ================================= filename ===================================
     folder_path = "exp/robust/" if robust_option else "exp/nonrobust/"
-    filename = "0524_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
+    filename = "0526_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
     f_ts_loss = open(folder_path + "ts/loss_{}.csv".format(filename), "w")
     f_ts_obj  = open(folder_path + "ts/obj_{}.csv".format(filename), "w")
     f_df_loss = open(folder_path + "df/loss_{}.csv".format(filename), "w")
@@ -217,10 +218,12 @@ if __name__ == "__main__":
                     phis = torch.cat((mean, variance), dim=1).cpu()
 
                     def ineq_fun(x):
-                        return G @ x[:x_size] - h
+                        return extended_G.numpy() @ x - extended_h.numpy()
+                        # return G @ x[:x_size] - h
 
                     def eq_fun(x):
-                        return A @ x[:x_size] - b
+                        return extended_A.numpy() @ x - extended_b.numpy()
+                        # return A @ x[:x_size] - b
 
                     constraints_slsqp = []
                     constraints_slsqp.append({"type": "eq",   "fun": eq_fun,   "jac": autograd.jacobian(eq_fun)})
@@ -240,7 +243,8 @@ if __name__ == "__main__":
                     def g_hess(x):
                         x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
                         hess = -dual_hess.hess(x_torch, phis)
-                        return hess.detach().numpy()[0]
+                        regularization_term = 0.01 * torch.eye(hess.shape[-1])
+                        return hess.detach().numpy()[0] + regularization_term
 
                     def g_hessp(x, p):
                         x_torch = torch.Tensor(x).view(1, x_size + lamb_size)
@@ -248,41 +252,57 @@ if __name__ == "__main__":
                         hessp = -dual_hess.hessp(x_torch, phis, p_torch)
                         return hessp.detach().numpy()[0]
 
-                    res = scipy.optimize.minimize(fun=g, x0=x0, method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, 1.0)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp, options={"maxiter": 100})
+                    x0 = np.random.rand(x_size + lamb_size) # initial point
+                    # x0 = np.concatenate((np.random.rand(x_size), np.zeros(lamb_size))) # initial point
+                    for tmp_count in range(10):
+                        res = scipy.optimize.minimize(fun=g, x0=x0, method=method, jac=g_jac, hessp=g_hessp, bounds=[(0.0, 1.0)]*(x_size) + [(0.0, M)]*(lamb_size), constraints=constraints_slsqp, options={"maxiter": 100})
+                        # x0 = res.x # update initial point
 
-                    # x0 = res.x # update initial point
-                    x0 = np.random.rand((x_size + lamb_size)) # initial point
+                        xlamb = torch.Tensor(res.x).view(1, x_size + lamb_size)
 
-                    xlamb = torch.Tensor(res.x).view(1, x_size + lamb_size)
+                        hess = -dual_hess.hess(xlamb, phis)
+                        regularization_term = 0.01 * torch.eye(hess.shape[-1])
+                        Q = hess + regularization_term
 
-                    hess = -dual_hess.hess(xlamb, phis)
-                    regularization_term = 0.01 * torch.eye(hess.shape[-1])
-                    Q = hess + regularization_term
-
-                    jac = -dual_gradient(xlamb, phis)[:,:x_size + lamb_size]
-                    p = (jac.view(1, -1) - torch.matmul(xlamb, Q)).squeeze()
+                        jac = -dual_gradient(xlamb, phis)[:,:x_size + lamb_size]
+                        p = (jac.view(1, -1) - torch.matmul(xlamb, Q)).squeeze()
                     
-                    qp_solver = qpth.qp.QPFunction()
-                    # qp_solver = qpthlocal.qp.QPFunction(verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI, zhats=xlamb)
+                        # ----------------------- nus, lambs, slacks computation -------------------
+                        slacks = extended_h - (extended_G @ xlamb.view(-1,1))[:,0]
 
-                    new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
-                    # new_x = xlamb[:,:x_size]
-                    new_x = new_xlamb_opt[:,:x_size]
+
+                        # ------------------------------ QP function -------------------------------
+                        # qp_solver = qpth.qp.QPFunction(verbose=-1) # WARNING: -1 for no verbose
+                        qp_solver = qpthlocal.qp.QPFunction(zhats=xlamb, nus=None, lams=None, slacks=None, verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI)
+
+                        new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
+                        # new_x = xlamb[:,:x_size]
+                        new_x = new_xlamb_opt[:,:x_size]
+                        x0 = new_xlamb_opt.detach().numpy()
+                        if abs(g(xlamb) - g(new_xlamb_opt)) < D_EPSILON:
+                            # print(tmp_count)
+                            break
+
+                    if False:
+                        print("old value: {}".format(g(xlamb)))
+                        print("new value: {}".format(g(new_xlamb_opt)))
+                        print("h - Gx: {}".format(extended_h - (extended_G @ new_xlamb_opt.view(-1,1))[0]))
+                        print("b - Ax: {}".format(extended_b - (extended_A @ new_xlamb_opt.view(-1,1))[0]))
 
                     labels_modified = constrained_attack(new_x, labels, constraint_matrix, attacker_budgets)
-                    obj_value = (labels_modified.view(labels_modified.shape[0], 1, labels.shape[1]).to("cpu") @ new_x.view(*new_x.shape, 1)).mean()
+                    obj_value = (labels_modified.view(labels_modified.shape[0], 1, labels.shape[1]).to("cpu") @ new_x.view(*new_x.shape, 1)).mean().to(device)
 
-                    if torch.norm(xlamb[:,:x_size] - new_x) > D_ABNORMAL and verbose_debug:
-                        print("ABNORMAL NORM: {}".format(torch.norm(xlamb[:,:x_size] - new_x)))
-                        print(res)
-                        print(source, dest)
-                        print("mean: {}, var: {}".format(mean, variance))
-                        print("label: {}, attacker budget: {}".format(labels, attacker_budgets))
-                        print("Old xlamb")
-                        print(xlamb)
-                        print("New xlamb")
-                        print(new_xlamb_opt)
-                        print(labels_modified)
+                    # if torch.norm(xlamb[:,:x_size] - new_x) > D_ABNORMAL and verbose_debug:
+                        # print("ABNORMAL NORM: {}".format(torch.norm(xlamb[:,:x_size] - new_x)))
+                        # print(res)
+                        # print(source, dest)
+                        # print("mean: {}, var: {}".format(mean, variance))
+                        # print("label: {}, attacker budget: {}".format(labels, attacker_budgets))
+                        # print("Old xlamb")
+                        # print(xlamb)
+                        # print("New xlamb")
+                        # print(new_xlamb_opt)
+                        # print(labels_modified)
 
                     if torch.any(obj_value < - D_CONST):
                         print("checking...")
@@ -290,9 +310,9 @@ if __name__ == "__main__":
                         print(new_x)
 
                     if robust_option:
-                        loss = loss_fn(mean, labels) + loss_fn(variance, attacker_budgets)
+                        loss = loss_fn(mean, labels) + loss_fn(variance, attacker_budgets).to(device)
                     else:
-                        loss = loss_fn(mean, labels_modified) 
+                        loss = loss_fn(mean, labels_modified).to(device)
 
                     batch_loss += loss if training_option == "two-stage" else obj_value # loss calculation
 

@@ -16,7 +16,9 @@ def make_shortest_path_matrix(g, s, t):
     A = np.zeros((g.number_of_nodes()+2, g.number_of_edges()))
     b = np.zeros((g.number_of_nodes())+2)
     G = np.zeros((g.number_of_edges() * 2, g.number_of_edges()))
+    # G = np.zeros((g.number_of_edges(), g.number_of_edges()))
     h = np.concatenate((np.zeros(g.number_of_edges()), np.ones(g.number_of_edges())))
+    # h = np.zeros(g.number_of_edges())
     #flow conservation constraints
     for v in g:
         if v != s and v != t:

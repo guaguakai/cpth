@@ -14,7 +14,7 @@ import pickle
 from linear import make_shortest_path_matrix
 
 # Random Seed Initialization
-SEED = 341234 # random.randint(0,10000)
+SEED = 1545 # random.randint(0,10000)
 print("Random seed: {}".format(SEED))
 torch.manual_seed(SEED)
 np.random.seed(SEED)
@@ -145,7 +145,7 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
     torch.manual_seed(SEED)
 
     n_targets = g.number_of_edges()
-    true_transform = make_fc(g.number_of_edges() + n_constraints + n_targets, n_features, num_layers=5)
+    true_transform = make_fc(g.number_of_edges() + n_constraints + n_targets, n_features, num_layers=2)
     
     def bimodal_random(num_samples, num_edges):
         c = torch.zeros(num_samples, num_edges)
@@ -157,12 +157,25 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
                 else: # 50 % low rate
                     c[i,j] = 0.5 * random.random()
         return c
+
+    def random_budget(num_samples, num_constraints):
+        # attacker_budget = torch.rand((num_samples, num_constraints))
+        attacker_budget = torch.zeros(num_samples, num_constraints)
+        for i in range(num_samples):
+            for j in range(num_constraints):
+                tmp = random.random()
+                if tmp > 0.5:
+                    attacker_budget[i,j] = 0.6 + 0.4 * random.random()
+                else:
+                    attacker_budget[i,j] = 0 + 0.1 * random.random()
+
+        return attacker_budget
     
 #    c_train = torch.rand(n_train, g.number_of_edges())
 #    c_test = torch.rand(n_test, g.number_of_edges())
 
     # =========== generating constraints with budget ============
-    budgets = torch.cat((max_budget * torch.rand((n_instances, n_constraints)), -torch.zeros(n_instances, n_targets)), dim=1)
+    budgets = torch.cat((max_budget * random_budget(n_instances, n_constraints), -torch.zeros(n_instances, n_targets)), dim=1)
     while True:
         constraint_matrix = np.concatenate((np.random.choice(2, size=(n_constraints, n_targets), p=[1-2.0/n_constraints,2.0/n_constraints]), -np.eye(n_targets)), axis=0) # numpy matrix
         if (np.any(np.sum(constraint_matrix[:-n_targets,:], axis=0) == 0) == False): break # make sure every entry is covered
