@@ -1,0 +1,8 @@
+Epoch, -2, mode, training, loss, 0.0, loss std, 0.0 
+Epoch, -2, mode, testing, loss, 0.0, loss std, 0.0 
+Epoch, -1, mode, training, loss, 0.052379049360752106, loss std, 0.0 
+Epoch, -1, mode, testing, loss, 0.052379049360752106, loss std, 0.0 
+Epoch, 0, mode, training, loss, 0.002231025312020544, loss std, 0.007974385033367982 
+Epoch, 0, mode, testing, loss, 6.859374934720108e-06, loss std, 0.0 
+Epoch, 1, mode, training, loss, 3.167699757019212e-06, loss std, 1.3537274810810485e-06 
+Epoch, 1, mode, testing, loss, 1.628645918572147e-06, loss std, 0.0 

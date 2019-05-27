@@ -14,7 +14,7 @@ import pickle
 from linear import make_shortest_path_matrix
 
 # Random Seed Initialization
-SEED = 1545 # random.randint(0,10000)
+SEED = random.randint(0,10000)
 print("Random seed: {}".format(SEED))
 torch.manual_seed(SEED)
 np.random.seed(SEED)
@@ -58,11 +58,12 @@ class Net(nn.Module):
 
         return nn.Sigmoid()(x)
 
-def generate_graph(n_nodes=100, n_instances=300, seed=SEED):
+def generate_graph_geometric(n_nodes=100, p=0.2, n_instances=300, seed=SEED):
     generation_succeed = False
     print("Generating graph...")
+
     while not generation_succeed:
-        original_graph = nx.random_geometric_graph(n_nodes, 0.20)
+        original_graph = nx.random_geometric_graph(n_nodes, p)
         g = nx.DiGraph(original_graph)
         c = np.zeros(g.number_of_edges())
         for idx, (u,v) in enumerate(g.edges()):
@@ -81,6 +82,42 @@ def generate_graph(n_nodes=100, n_instances=300, seed=SEED):
         source, dest = np.random.choice(list(g.nodes()), size=2, replace=False)
         source_list.append(source)
         dest_list.append(dest)
+
+    print("Finish generating graph!")
+    return g, c, source_list, dest_list
+
+def generate_graph_erdos(n_nodes=100, p=0.2, n_instances=300, seed=SEED):
+    generation_succeed = False
+    print("Generating graph...")
+
+    original_graph = nx.erdos_renyi_graph(n_nodes, p, directed=True)
+    g = original_graph
+
+    # original_graph = nx.random_geometric_graph(n_nodes, 0.20)
+    # g = nx.DiGraph(original_graph)
+    c = np.zeros(g.number_of_edges())
+    for idx, (u,v) in enumerate(g.edges()):
+        g[u][v]['idx'] = idx
+        g[u][v]['weight'] = c[idx]
+    
+    # if nx.is_connected(original_graph):
+    #     generation_succeed = True
+    # else:
+    #     generation_succeed = False
+
+    print("Generating sources and destinations...")
+    source_list = []
+    dest_list = []
+    while True:
+        try:
+            source, dest = np.random.choice(list(g.nodes()), size=2, replace=False)
+            path = nx.shortest_path(g, source=source, target=dest)
+            source_list.append(source)
+            dest_list.append(dest)
+        except:
+            continue
+        if len(source_list) == n_instances:
+            break
 
     print("Finish generating graph!")
     return g, c, source_list, dest_list
@@ -155,7 +192,7 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
                 if tmp < 0.5: # 50 % high rate
                     c[i,j] = 4 + random.random()
                 else: # 50 % low rate
-                    c[i,j] = 0.5 * random.random()
+                    c[i,j] = 0.5 + 0.5 * random.random()
         return c
 
     def random_budget(num_samples, num_constraints):

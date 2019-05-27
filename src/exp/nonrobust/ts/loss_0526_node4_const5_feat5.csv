@@ -1,0 +1,14 @@
+Epoch, -2, mode, training, loss, 0.008181818760931492, loss std, 0.0 
+Epoch, -2, mode, testing, loss, 0.008181818760931492, loss std, 0.0 
+Epoch, -1, mode, training, loss, 0.03720617666840553, loss std, 0.0 
+Epoch, -1, mode, testing, loss, 0.03720617666840553, loss std, 0.0 
+Epoch, 0, mode, training, loss, 0.009239841803597907, loss std, 0.004059087767423956 
+Epoch, 0, mode, testing, loss, 0.008187136612832546, loss std, 0.0 
+Epoch, 1, mode, training, loss, 0.008184752512412767, loss std, 1.0295510497670619e-06 
+Epoch, 1, mode, testing, loss, 0.008183426223695278, loss std, 0.0 
+Epoch, 2, mode, training, loss, 0.008182926770920555, loss std, 2.4110938958192707e-07 
+Epoch, 2, mode, testing, loss, 0.008182578720152378, loss std, 0.0 
+Epoch, 3, mode, training, loss, 0.008182396739721298, loss std, 9.233249617047422e-08 
+Epoch, 3, mode, testing, loss, 0.008182256482541561, loss std, 0.0 
+Epoch, 4, mode, training, loss, 0.00818217033908392, loss std, 4.4906426196110754e-08 
+Epoch, 4, mode, testing, loss, 0.008182100020349026, loss std, 0.0 
