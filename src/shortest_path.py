@@ -180,8 +180,7 @@ if __name__ == "__main__":
     training_obj  = np.zeros((4, num_epochs + 2))
     testing_obj   = np.zeros((4, num_epochs + 2))
     # ============================= two stage training ================================
-    for idx, (robust_option, training_option) in enumerate(itertools.product([True], ["decision-focused"])):
-    # for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
+    for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
         print("Training {} {}...".format("robust" if robust_option else "non-robust", training_option))
 
         model = Net(n_features, n_targets).to(device)
