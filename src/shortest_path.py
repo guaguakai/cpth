@@ -24,11 +24,6 @@ import tqdm
 
 from shortest_path_utils import Net, ShortestPathLoss, make_fc, constrained_attack, random_constraints
 
-from shortest_path_utils import load_data
-from shortest_path_utils import generate_graph_geometric as generate_graph
-# from shortest_path_utils import load_toy_data as load_data
-# from shortest_path_utils import generate_toy_graph as generate_graph
-
 from toy_obj import Dual, DualFunction, DualGradient, DualHess
 from linear import make_shortest_path_matrix
 
@@ -76,21 +71,35 @@ if __name__ == "__main__":
 
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
-    # =============================================================================
-    n_nodes = 10
-    n_instances = 1000
-    n_features = 32
-    p = 0.3 # edge prob
-    # intermediate_size = 512
+    # ================================= toy example ===============================
+    toy_option = False
+    if toy_option:
+        from shortest_path_utils import load_toy_data as load_data
+        from shortest_path_utils import generate_toy_graph as generate_graph
+        n_nodes = 4
+        n_instances = 300
+        n_features = 5
+        p = 0.3 # edge prob
+        max_budget  = 0.5
+        max_latency = 0.5
+        n_constraints = 5
+    else:
+        from shortest_path_utils import load_data
+        from shortest_path_utils import generate_graph_geometric as generate_graph
+        n_nodes = 10
+        n_instances = 1000
+        n_features = 32
+        p = 0.3 # edge prob
+        max_budget  = 5.0
+        max_latency = 5.0
+        intermediate_size = 512
+        n_constraints = 10
 
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, p=p, n_instances=n_instances)
     n_targets = graph.number_of_edges()
-    n_constraints = 10
 
     # =============================== data loading ================================
     print("generating data...")
-    max_budget  = 5.0
-    max_latency = 5.0
     train_loader, test_loader, constraint_matrix = load_data(args, kwargs, graph, latency, n_instances, n_constraints, n_features=n_features, max_budget=max_budget)
 
     edge_size = n_targets
@@ -100,7 +109,7 @@ if __name__ == "__main__":
     m_size = len(constraint_matrix)
     lamb_size  = m_size
     phi_size = edge_size + m_size
-    M = 1e2
+    M = 1e3
     tol = 1e-3
     method = "SLSQP"
     # method = "trust-constr"
@@ -120,7 +129,7 @@ if __name__ == "__main__":
     # ==============================================================================
     blackbox_option = False
     if not blackbox_option: # precompute
-        P_inv = 100 * np.eye(theta_size)
+        P_inv = 50 * np.eye(theta_size)
         Q = np.zeros((1, x_size + lamb_size, x_size + lamb_size))
         Q[0,:x_size, :x_size] += P_inv
         Q[0,:x_size, x_size:] += - np.transpose(constraint_matrix @ P_inv)
@@ -171,7 +180,8 @@ if __name__ == "__main__":
     training_obj  = np.zeros((4, num_epochs + 2))
     testing_obj   = np.zeros((4, num_epochs + 2))
     # ============================= two stage training ================================
-    for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
+    for idx, (robust_option, training_option) in enumerate(itertools.product([True], ["decision-focused"])):
+    # for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
         print("Training {} {}...".format("robust" if robust_option else "non-robust", training_option))
 
         model = Net(n_features, n_targets).to(device)
@@ -312,8 +322,8 @@ if __name__ == "__main__":
                     else: # QP direct computation
                         # Q has been precomputed
                         p = torch.cat((torch.zeros(x_size).to(device), torch.Tensor(constraint_matrix).to(device) @ mean[0] + variance[0])).to("cpu")
-                        qp_solver = qpth.qp.QPFunction(verbose=-1) # WARNING: -1 for no verbose
-                        # qp_solver = qpthlocal.qp.QPFunction(zhats=None, nus=None, lams=None, slacks=None, verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI)
+                        # qp_solver = qpth.qp.QPFunction(verbose=0) # WARNING: -1 for no verbose
+                        qp_solver = qpthlocal.qp.QPFunction(zhats=None, nus=None, lams=None, slacks=None, verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI)
                         new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
                         # TODO
 

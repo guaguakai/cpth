@@ -122,7 +122,7 @@ def generate_graph_erdos(n_nodes=100, p=0.2, n_instances=300, seed=SEED):
     print("Finish generating graph!")
     return g, c, source_list, dest_list
 
-def generate_toy_graph(n_nodes=4, n_instances=300):
+def generate_toy_graph(n_nodes=4, p=None, n_instances=300):
     assert(n_nodes==4)
     assert(n_instances==300)
     g = nx.DiGraph()
