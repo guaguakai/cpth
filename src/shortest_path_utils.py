@@ -189,10 +189,10 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
         for i in range(num_samples):
             for j in range(num_edges):
                 tmp = random.random()
-                if tmp < 0.5: # 50 % high rate
+                if tmp < 0.8: # 50 % high rate
                     c[i,j] = 4 + random.random()
                 else: # 50 % low rate
-                    c[i,j] = 0.5 + 0.5 * random.random()
+                    c[i,j] = 0 + 0.5 * random.random()
         return c
 
     def random_budget(num_samples, num_constraints):
@@ -202,7 +202,7 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
             for j in range(num_constraints):
                 tmp = random.random()
                 if tmp > 0.5:
-                    attacker_budget[i,j] = 0.6 + 0.4 * random.random()
+                    attacker_budget[i,j] = 0.8 + 0.2 * random.random()
                 else:
                     attacker_budget[i,j] = 0 + 0.1 * random.random()
 

@@ -79,7 +79,7 @@ if __name__ == "__main__":
         n_nodes = 4
         n_instances = 300
         n_features = 5
-        p = 0.3 # edge prob
+        p = 0.2 # edge prob
         max_budget  = 0.5
         max_latency = 0.5
         n_constraints = 5
@@ -87,13 +87,13 @@ if __name__ == "__main__":
         from shortest_path_utils import load_data
         from shortest_path_utils import generate_graph_geometric as generate_graph
         n_nodes = 10
-        n_instances = 1000
+        n_instances = 300
         n_features = 32
-        p = 0.3 # edge prob
-        max_budget  = 5.0
+        p = 0.2 # edge prob
+        max_budget  = 10.0
         max_latency = 5.0
         intermediate_size = 512
-        n_constraints = 10
+        n_constraints = 20
 
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, p=p, n_instances=n_instances)
     n_targets = graph.number_of_edges()
@@ -109,7 +109,7 @@ if __name__ == "__main__":
     m_size = len(constraint_matrix)
     lamb_size  = m_size
     phi_size = edge_size + m_size
-    M = 1e3
+    M = 1e4
     tol = 1e-3
     method = "SLSQP"
     # method = "trust-constr"
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     # ==============================================================================
     blackbox_option = False
     if not blackbox_option: # precompute
-        P_inv = 50 * np.eye(theta_size)
+        P_inv = 100 * np.eye(theta_size)
         Q = np.zeros((1, x_size + lamb_size, x_size + lamb_size))
         Q[0,:x_size, :x_size] += P_inv
         Q[0,:x_size, x_size:] += - np.transpose(constraint_matrix @ P_inv)
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     # ================================= filename ===================================
     # folder_path = "exp/robust/" if robust_option else "exp/nonrobust/"
-    filename = "0528_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
+    filename = "0528_1300_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
     # f_ts_loss = open(folder_path + "ts/loss_{}.csv".format(filename), "w")
     # f_ts_obj  = open(folder_path + "ts/obj_{}.csv".format(filename), "w")
     # f_df_loss = open(folder_path + "df/loss_{}.csv".format(filename), "w")
