@@ -112,6 +112,8 @@ def generate_graph_erdos(n_nodes=100, p=0.2, n_instances=300, seed=SEED):
         try:
             source, dest = np.random.choice(list(g.nodes()), size=2, replace=False)
             path = nx.shortest_path(g, source=source, target=dest)
+            if len(path) < 2:
+                continue
             source_list.append(source)
             dest_list.append(dest)
         except:
@@ -201,10 +203,8 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
         for i in range(num_samples):
             for j in range(num_constraints):
                 tmp = random.random()
-                if tmp < 0.5:
-                    attacker_budget[i,j] = 0.8 + 0.2 * random.random()
-                elif tmp < 0.9:
-                    attacker_budget[i,j] = 0.4 + 0.1 * random.random()
+                if tmp < 0.9:
+                    attacker_budget[i,j] = 0.5 + 0.5 * random.random()
                 else:
                     attacker_budget[i,j] = 0 + 0.1 * random.random()
 
@@ -222,6 +222,7 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
     assert(np.any(np.sum(constraint_matrix[:-n_targets,:], axis=0) == 0) == False) # make sure every entry is covered
 
     # ================== generating dataset =====================
+    # labels = (torch.Tensor(latency) + torch.ones(n_instances, g.number_of_edges())).float()
     labels = (torch.Tensor(latency) + bimodal_random(n_instances, g.number_of_edges())).float()
     features = true_transform(torch.cat((labels, budgets), dim=1)).detach()
 

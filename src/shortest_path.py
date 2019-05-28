@@ -45,8 +45,8 @@ if __name__ == "__main__":
                         help='input batch size for testing (default: 1)')
     parser.add_argument('--epochs', type=int, default=20, metavar='N',
                         help='number of epochs to train (default: 20)')
-    parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
-                        help='learning rate (default: 0.001)')
+    parser.add_argument('--lr', type=float, default=0.0001, metavar='LR',
+                        help='learning rate (default: 0.0001)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
                         help='SGD momentum (default: 0.5)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -79,7 +79,7 @@ if __name__ == "__main__":
         n_nodes = 4
         n_instances = 300
         n_features = 5
-        p = 0.2 # edge prob
+        p = 0.3 # edge prob
         max_budget  = 0.5
         max_latency = 0.5
         n_constraints = 5
@@ -88,12 +88,12 @@ if __name__ == "__main__":
         from shortest_path_utils import generate_graph_geometric as generate_graph
         n_nodes = 10
         n_instances = 300
-        n_features = 32
-        p = 0.2 # edge prob
-        max_budget  = 10.0
+        n_features = 128
+        p = 0.3 # edge prob
+        max_budget  = 5.0
         max_latency = 5.0
         intermediate_size = 512
-        n_constraints = 20
+        n_constraints = 10
 
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, p=p, n_instances=n_instances)
     n_targets = graph.number_of_edges()
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     # ================================= filename ===================================
     # folder_path = "exp/robust/" if robust_option else "exp/nonrobust/"
-    filename = "0528_1400_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
+    filename = "0528_1500_server_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
     # f_ts_loss = open(folder_path + "ts/loss_{}.csv".format(filename), "w")
     # f_ts_obj  = open(folder_path + "ts/obj_{}.csv".format(filename), "w")
     # f_df_loss = open(folder_path + "df/loss_{}.csv".format(filename), "w")
@@ -180,6 +180,7 @@ if __name__ == "__main__":
     training_obj  = np.zeros((4, num_epochs + 2))
     testing_obj   = np.zeros((4, num_epochs + 2))
     # ============================= two stage training ================================
+    # for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage"])):
     for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
         print("Training {} {}...".format("robust" if robust_option else "non-robust", training_option))
 
@@ -215,16 +216,16 @@ if __name__ == "__main__":
                     A, b, G, h = make_shortest_path_matrix(graph, source, dest)
 
                     # lossen constraints => possibly inaccurate but QP can sovle it more efficient (also not leading to infeasible solution)
-                    # newG = np.pad(G, ((0, lamb_size), (0, lamb_size)), "constant", constant_values=0)
-                    # newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
-                    # newh = np.pad(h, (0, lamb_size), "constant", constant_values=-D_CONST)
+                    newG = np.pad(G, ((0, lamb_size), (0, lamb_size)), "constant", constant_values=0)
+                    newG[-lamb_size:, -lamb_size:] = -torch.eye(lamb_size)
+                    newh = np.pad(h, (0, lamb_size), "constant", constant_values=-D_CONST)
 
                     # tighter constraints => more possible that QP cannot solve it but more accurate
-                    newG = np.pad(G, ((0, lamb_size * 2), (0, lamb_size)), "constant", constant_values=0)
-                    newG[-2*lamb_size:-lamb_size, -lamb_size:] = -torch.eye(lamb_size)
-                    newG[-lamb_size:,-lamb_size:] = torch.eye(lamb_size)
-                    newh = np.pad(h, (0, lamb_size * 2), "constant", constant_values=D_CONST)
-                    newh[-lamb_size:] = M
+                    # newG = np.pad(G, ((0, lamb_size * 2), (0, lamb_size)), "constant", constant_values=0)
+                    # newG[-2*lamb_size:-lamb_size, -lamb_size:] = -torch.eye(lamb_size)
+                    # newG[-lamb_size:,-lamb_size:] = torch.eye(lamb_size)
+                    # newh = np.pad(h, (0, lamb_size * 2), "constant", constant_values=D_CONST)
+                    # newh[-lamb_size:] = M
 
                     newA = np.pad(A, ((0,0), (0, lamb_size)), "constant", constant_values=0)
                     newb = b # np.pad(b, (0, lamb_size), "constant", constant_values=0)
