@@ -201,8 +201,10 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
         for i in range(num_samples):
             for j in range(num_constraints):
                 tmp = random.random()
-                if tmp > 0.5:
+                if tmp < 0.5:
                     attacker_budget[i,j] = 0.8 + 0.2 * random.random()
+                elif tmp < 0.9:
+                    attacker_budget[i,j] = 0.4 + 0.1 * random.random()
                 else:
                     attacker_budget[i,j] = 0 + 0.1 * random.random()
 
