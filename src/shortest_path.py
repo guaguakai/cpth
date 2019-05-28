@@ -369,7 +369,7 @@ if __name__ == "__main__":
                     if (batch_idx+1) % 10 == 0 and verbose:
                         print('{} Epoch: {} [{}/{} ({:.0f}%)]\t Average Loss: {:.6f}, Average obj value: {}'.format(
                             mode, epoch, (batch_idx+1) * len(features), len(data_loader),
-                            100. * batch_idx / len(data_loader), np.mean(loss_list), np.mean(obj_list)))
+                            100. * batch_idx / len(data_loader), np.mean(loss_list[-10:]), np.mean(obj_list[-10:])))
 
                 print("Overall {} loss: {}, obj value: {}".format(mode, np.mean(loss_list), np.mean(obj_list)))
 
