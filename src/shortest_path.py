@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     # ================================= filename ===================================
     # folder_path = "exp/robust/" if robust_option else "exp/nonrobust/"
-    filename = "0528_1500_server_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
+    filename = "0528_1800_server_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
     # f_ts_loss = open(folder_path + "ts/loss_{}.csv".format(filename), "w")
     # f_ts_obj  = open(folder_path + "ts/obj_{}.csv".format(filename), "w")
     # f_df_loss = open(folder_path + "df/loss_{}.csv".format(filename), "w")
@@ -189,8 +189,8 @@ if __name__ == "__main__":
     uncertainty_model_initial = Net(n_features, m_size).to(device)
 
     # ============================= two stage training ================================
-    for idx, (robust_option, training_option) in enumerate(itertools.product([True], ["two-stage", "decision-focused"])):
-    # for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
+    # for idx, (robust_option, training_option) in enumerate(itertools.product([True], ["two-stage", "decision-focused"])):
+    for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
         print("Training {} {}...".format("robust" if robust_option else "non-robust", training_option))
 
         model = copy.deepcopy(model_initial)
