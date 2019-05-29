@@ -43,8 +43,8 @@ if __name__ == "__main__":
                         help='input batch size for training (default: 1)')
     parser.add_argument('--test-batch-size', type=int, default=1, metavar='N',
                         help='input batch size for testing (default: 1)')
-    parser.add_argument('--epochs', type=int, default=20, metavar='N',
-                        help='number of epochs to train (default: 20)')
+    parser.add_argument('--epochs', type=int, default=10, metavar='N',
+                        help='number of epochs to train (default: 10)')
     parser.add_argument('--lr', type=float, default=0.0001, metavar='LR',
                         help='learning rate (default: 0.0001)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
@@ -85,7 +85,8 @@ if __name__ == "__main__":
         n_constraints = 5
     else:
         from shortest_path_utils import load_data
-        from shortest_path_utils import generate_graph_geometric as generate_graph
+        from shortest_path_utils import generate_graph_erdos as generate_graph
+        # from shortest_path_utils import generate_graph_geometric as generate_graph
         n_nodes = 10
         n_instances = 300
         n_features = 128
@@ -129,14 +130,17 @@ if __name__ == "__main__":
     # ==============================================================================
     blackbox_option = False
     if not blackbox_option: # precompute
-        P_inv = 100 * np.eye(theta_size)
+        relaxation = 0.01
+        regularization = 0.01
+
+        P_inv = (1/relaxation) * np.eye(theta_size)
         Q = np.zeros((1, x_size + lamb_size, x_size + lamb_size))
         Q[0,:x_size, :x_size] += P_inv
         Q[0,:x_size, x_size:] += - np.transpose(constraint_matrix @ P_inv)
         Q[0,x_size:, :x_size] += - constraint_matrix @ P_inv
         Q[0,x_size:, x_size:] += constraint_matrix @ P_inv @ np.transpose(constraint_matrix)
         Q = torch.Tensor(Q).to("cpu")
-        Q = Q + 0.01 * torch.eye(x_size + lamb_size)
+        Q = Q + regularization * torch.eye(x_size + lamb_size)
 
 
 
@@ -179,13 +183,18 @@ if __name__ == "__main__":
     testing_loss  = np.zeros((4, num_epochs + 2))
     training_obj  = np.zeros((4, num_epochs + 2))
     testing_obj   = np.zeros((4, num_epochs + 2))
+
+    # ============================ model initialization ===============================
+    model_initial = Net(n_features, n_targets).to(device)
+    uncertainty_model_initial = Net(n_features, m_size).to(device)
+
     # ============================= two stage training ================================
-    # for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage"])):
-    for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
+    for idx, (robust_option, training_option) in enumerate(itertools.product([True], ["two-stage", "decision-focused"])):
+    # for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
         print("Training {} {}...".format("robust" if robust_option else "non-robust", training_option))
 
-        model = Net(n_features, n_targets).to(device)
-        uncertainty_model = Net(n_features, m_size).to(device)
+        model = copy.deepcopy(model_initial)
+        uncertainty_model = copy.deepcopy(uncertainty_model_initial)
 
         optimizer = optim.Adam(list(model.parameters()) + list(uncertainty_model.parameters()), lr=learning_rate)
 
@@ -329,7 +338,7 @@ if __name__ == "__main__":
 
                     new_x = new_xlamb_opt[:,:x_size]
 
-                    labels_modified = constrained_attack(new_x, labels, constraint_matrix, attacker_budgets)
+                    labels_modified = constrained_attack(new_x, labels, constraint_matrix, attacker_budgets, relaxation=relaxation)
                     obj_value = (labels_modified.view(labels_modified.shape[0], 1, labels.shape[1]).to(device) @ new_x.to(device).view(*new_x.shape, 1)).mean().to(device)
 
                     # if torch.norm(xlamb[:,:x_size] - new_x) > D_ABNORMAL and verbose_debug:

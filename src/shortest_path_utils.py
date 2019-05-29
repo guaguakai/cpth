@@ -452,7 +452,7 @@ class ShortestPathLoss():
         net.train()
         return loss
 
-def constrained_attack(decisions, labels, constraint_matrix, attacker_budget): # x: decision, theta: intermediate label, C: constraint matrix, r: attacker budget
+def constrained_attack(decisions, labels, constraint_matrix, attacker_budget, relaxation=0.01): # x: decision, theta: intermediate label, C: constraint matrix, r: attacker budget
     # constraint_matrix and budget r need to be concatenated with -np.eye(n_targets) and np.zeros(n_targets)
     from gurobipy import Model, GRB, LinExpr
     batch_size = len(decisions)
@@ -461,22 +461,24 @@ def constrained_attack(decisions, labels, constraint_matrix, attacker_budget): #
     # ======================= attacker ========================
     modified_theta = torch.zeros_like(labels)
     for i in range(batch_size):
-        x, theta, r = decisions[i], labels[i], attacker_budget[i].cpu().numpy()
-        n = len(theta)
+        x, old_theta, r = decisions[i].cpu().detach().numpy(), labels[i].cpu().detach().numpy(), attacker_budget[i].cpu().detach().numpy()
+        n = len(old_theta)
         m_size = len(constraint_matrix)
 
-        model = Model()
+        model = Model("qp")
         model.params.OutputFlag=0
         model.params.TuneOutput=0
 
         deltas = model.addVars(n, vtype=[GRB.CONTINUOUS]*n, lb=0)
+        thetas = [old_theta[j] + deltas[j] for j in range(n)]
         for j in range(m_size):
             model.addConstr(LinExpr(constraint_matrix[j], [deltas[k] for k in range(n)]) <= r[j])
 
-        model.setObjective(LinExpr(x, [deltas[k] for k in range(n)]), GRB.MAXIMIZE)
+        obj = sum([x[k] * thetas[k] for k in range(n)]) - relaxation * sum([thetas[j] * thetas[j] for j in range(n)])
+        model.setObjective(obj, GRB.MAXIMIZE)
         model.optimize()
         for j in range(n):
-            modified_theta[i][j] = theta[j] + deltas[j].x
+            modified_theta[i][j] = old_theta[j] + deltas[j].x
 
     # print("modifications: {}".format(modified_theta - labels))
     # print("decision: {}".format(decisions))
