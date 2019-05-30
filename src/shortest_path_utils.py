@@ -14,13 +14,13 @@ import pickle
 from linear import make_shortest_path_matrix
 
 # Random Seed Initialization
-SEED = random.randint(0,10000)
+SEED = 1234 # random.randint(0,10000)
 print("Random seed: {}".format(SEED))
 torch.manual_seed(SEED)
 np.random.seed(SEED)
 random.seed(SEED)
 
-def make_fc(num_features, num_targets, num_layers = 1, intermediate_size = 200, activation = 'relu'):
+def make_fc(num_features, num_targets, num_layers = 1, intermediate_size = 2048, activation = 'relu'):
     if num_layers > 1:
         if activation == 'relu':
             activation_fn = nn.ReLU
@@ -39,24 +39,55 @@ def make_fc(num_features, num_targets, num_layers = 1, intermediate_size = 200, 
     else:
         return nn.Sequential(nn.Linear(num_features, num_targets), nn.Sigmoid())
 
-class Net(nn.Module):
-    def __init__(self, n_features, n_targets, intermediate_size = 200):
-        super(Net, self).__init__()
+class MeanNet(nn.Module):
+    def __init__(self, n_features, n_targets, intermediate_size = 512):
+        super(MeanNet, self).__init__()
         self.num_features = n_features # TODO
         self.num_targets = n_targets
         self.intermediate_size = intermediate_size
 
         self.fc1 = nn.Linear(self.num_features, intermediate_size)
-        self.fc2 = nn.Linear(intermediate_size, intermediate_size)
-        self.fc3 = nn.Linear(intermediate_size, self.num_targets)
+        self.fc2 = nn.Linear(intermediate_size, self.num_targets)
+        self.dropout = nn.Dropout(0.5)
+        # self.fc3 = nn.Linear(intermediate_size, self.num_targets)
 
     def forward(self, x):
-        x = nn.ReLU()(self.fc1(x))
-        x = nn.ReLU()(self.fc2(x))
-        # x = nn.Dropout(x)
-        x = self.fc3(x)
+        x = nn.functional.relu(self.fc1(x))
+        # x = self.dropout(x)
+        x = self.fc2(x)
+        # x = self.dropout(x)
+        
+        x = nn.Sigmoid()(x) * 5
+        # x = nn.Softplus()(x)
+        return x
 
-        return nn.Sigmoid()(x)
+        # x = nn.Dropout(x)
+        # x = self.fc3(x)
+        # return nn.Sigmoid()(x)
+
+class VarianceNet(nn.Module):
+    def __init__(self, n_features, n_targets, intermediate_size = 512):
+        super(VarianceNet, self).__init__()
+        self.num_features = n_features # TODO
+        self.num_targets = n_targets
+        self.intermediate_size = intermediate_size
+
+        self.fc1 = nn.Linear(self.num_features, intermediate_size)
+        self.fc2 = nn.Linear(intermediate_size, self.num_targets)
+        self.dropout = nn.Dropout(0.5)
+        # self.fc3 = nn.Linear(intermediate_size, self.num_targets)
+
+    def forward(self, x):
+        x = nn.functional.relu(self.fc1(x))
+        # x = self.dropout(x)
+        x = self.fc2(x)
+        # x = self.dropout(x)
+        x = nn.Sigmoid()(x) * 5
+        # return nn.Sigmoid()(x)
+        # x = nn.Softplus()(x)
+        # x = x / torch.sum(x)
+        return x
+
 
 def generate_graph_geometric(n_nodes=100, p=0.2, n_instances=300, seed=SEED):
     generation_succeed = False
@@ -112,7 +143,7 @@ def generate_graph_erdos(n_nodes=100, p=0.2, n_instances=300, seed=SEED):
         try:
             source, dest = np.random.choice(list(g.nodes()), size=2, replace=False)
             path = nx.shortest_path(g, source=source, target=dest)
-            if len(path) < 2:
+            if len(path) < 3:
                 continue
             source_list.append(source)
             dest_list.append(dest)
@@ -191,7 +222,7 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
         for i in range(num_samples):
             for j in range(num_edges):
                 tmp = random.random()
-                if tmp < 0.8: # 50 % high rate
+                if tmp < 0.5: # 50 % high rate
                     c[i,j] = 4 + random.random()
                 else: # 50 % low rate
                     c[i,j] = 0 + 0.5 * random.random()
@@ -225,6 +256,8 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
     # labels = (torch.Tensor(latency) + torch.ones(n_instances, g.number_of_edges())).float()
     labels = (torch.Tensor(latency) + bimodal_random(n_instances, g.number_of_edges())).float()
     features = true_transform(torch.cat((labels, budgets), dim=1)).detach()
+    # features = true_transform(nn.functional.normalize(torch.cat((labels, budgets), dim=1))).detach()
+    # features = nn.functional.normalize(torch.cat((labels, budgets), dim=1))
 
     # print(features.shape)
     # print(labels.shape)

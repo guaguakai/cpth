@@ -22,7 +22,7 @@ import copy
 import time
 import tqdm
 
-from shortest_path_utils import Net, ShortestPathLoss, make_fc, constrained_attack, random_constraints
+from shortest_path_utils import MeanNet, VarianceNet, ShortestPathLoss, make_fc, constrained_attack, random_constraints
 
 from toy_obj import Dual, DualFunction, DualGradient, DualHess
 from linear import make_shortest_path_matrix
@@ -45,8 +45,8 @@ if __name__ == "__main__":
                         help='input batch size for testing (default: 1)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
                         help='number of epochs to train (default: 10)')
-    parser.add_argument('--lr', type=float, default=0.0001, metavar='LR',
-                        help='learning rate (default: 0.0001)')
+    parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
+                        help='learning rate (default: 0.001)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
                         help='SGD momentum (default: 0.5)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
     # ================================= toy example ===============================
-    toy_option = False
+    toy_option = True
     if toy_option:
         from shortest_path_utils import load_toy_data as load_data
         from shortest_path_utils import generate_toy_graph as generate_graph
@@ -89,7 +89,7 @@ if __name__ == "__main__":
         # from shortest_path_utils import generate_graph_geometric as generate_graph
         n_nodes = 10
         n_instances = 300
-        n_features = 128
+        n_features = 2048
         p = 0.3 # edge prob
         max_budget  = 5.0
         max_latency = 5.0
@@ -98,6 +98,7 @@ if __name__ == "__main__":
 
     graph, latency, source_list, dest_list = generate_graph(n_nodes=n_nodes, p=p, n_instances=n_instances)
     n_targets = graph.number_of_edges()
+    # n_features = n_targets * 2 + n_constraints
 
     # =============================== data loading ================================
     print("generating data...")
@@ -146,7 +147,7 @@ if __name__ == "__main__":
 
     # ================================= filename ===================================
     # folder_path = "exp/robust/" if robust_option else "exp/nonrobust/"
-    filename = "0528_1900_server_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
+    filename = "0529_1100_server_node{}_const{}_feat{}".format(n_nodes, n_constraints, n_features)
     # f_ts_loss = open(folder_path + "ts/loss_{}.csv".format(filename), "w")
     # f_ts_obj  = open(folder_path + "ts/obj_{}.csv".format(filename), "w")
     # f_df_loss = open(folder_path + "df/loss_{}.csv".format(filename), "w")
@@ -185,18 +186,19 @@ if __name__ == "__main__":
     testing_obj   = np.zeros((4, num_epochs + 2))
 
     # ============================ model initialization ===============================
-    model_initial = Net(n_features, n_targets).to(device)
-    uncertainty_model_initial = Net(n_features, m_size).to(device)
+    model_initial = MeanNet(n_features, n_targets).to(device)
+    uncertainty_model_initial = VarianceNet(n_features, m_size).to(device)
 
     # ============================= two stage training ================================
-    # for idx, (robust_option, training_option) in enumerate(itertools.product([True], ["two-stage", "decision-focused"])):
-    for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
+    for idx, (robust_option, training_option) in enumerate(itertools.product([True], ["decision-focused"])):
+    # for idx, (robust_option, training_option) in enumerate(itertools.product([False, True], ["two-stage", "decision-focused"])):
         print("Training {} {}...".format("robust" if robust_option else "non-robust", training_option))
 
         model = copy.deepcopy(model_initial)
         uncertainty_model = copy.deepcopy(uncertainty_model_initial)
 
-        optimizer = optim.Adam(list(model.parameters()) + list(uncertainty_model.parameters()), lr=learning_rate)
+        tmp_learning_rate = learning_rate / 100 if robust_option else learning_rate
+        optimizer = optim.Adam(list(model.parameters()) + list(uncertainty_model.parameters()), lr=tmp_learning_rate)
 
         for epoch in tqdm.trange(-2, num_epochs): # start from -1 to test original objective value, -2 to test the optimal
             for mode in ["training", "testing"]:
@@ -246,17 +248,19 @@ if __name__ == "__main__":
 
                     # -------------------- prediction ----------------------
 
-                    mean = model(features).view(nBatch, theta_size) * max_latency
+                    mean = model(features).view(nBatch, theta_size) # * max_latency
                     if epoch == -2: # check the optimal performance
                         mean = labels
                         variance = attacker_budgets if robust_option else torch.zeros(nBatch, m_size).to(device)
                     elif robust_option:
                         variance = torch.zeros(nBatch, m_size).to(device)
-                        variance[:,:-n_targets] = uncertainty_model(features).view(nBatch, m_size)[:,:-n_targets] * max_budget
+                        variance[:,:-n_targets] = uncertainty_model(features).view(nBatch, m_size)[:,:-n_targets] # * max_budget
                     else:
                         variance = torch.zeros(nBatch, m_size).to(device)
 
                     phis = torch.cat((mean, variance), dim=1).cpu()
+                    mean.retain_grad()
+                    variance.retain_grad()
 
                     def ineq_fun(x):
                         return extended_G.numpy() @ x - extended_h.numpy()
@@ -359,11 +363,13 @@ if __name__ == "__main__":
                         print(new_x)
                         sys.quit()
 
-                    if robust_option:
-                        loss = loss_fn(mean, labels).to(device) + loss_fn(variance, attacker_budgets).to(device)
-                    else:
-                        loss = loss_fn(mean, labels).to(device) + loss_fn(variance, attacker_budgets).to(device)
-                        # loss = loss_fn(mean, labels_modified).to(device) + loss_fn(variance, attacker_budgets).to(device)
+                    loss = loss_fn(torch.cat((mean, variance), dim=1), torch.cat((labels, attacker_budgets), dim=1)).to(device)
+
+                    # if robust_option:
+                    #     loss = loss_fn(mean, labels).to(device) + loss_fn(variance, attacker_budgets).to(device)
+                    # else:
+                    #     loss = loss_fn(mean, labels).to(device) + loss_fn(variance, attacker_budgets).to(device)
+                    #     # loss = loss_fn(mean, labels_modified).to(device) + loss_fn(variance, attacker_budgets).to(device)
 
                     batch_loss += loss if training_option == "two-stage" else obj_value # loss calculation
 
@@ -372,6 +378,10 @@ if __name__ == "__main__":
                         batch_loss.backward()
                         optimizer.step()
                         batch_loss = 0
+                        # print("mean: {}".format(mean.grad))
+                        # print("variance: {}".format(variance.grad))
+                        # print("model gradient size: {}".format(torch.norm(model.fc1.weight.grad) + torch.norm(model.fc2.weight.grad)))
+                        # print("uncertainty model gradient size: {}".format(torch.norm(uncertainty_model.fc1.weight.grad) + torch.norm(uncertainty_model.fc2.weight.grad)))
 
                     loss_list.append(loss.item())
                     obj_list.append(obj_value.item())
