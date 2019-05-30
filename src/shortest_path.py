@@ -72,7 +72,7 @@ if __name__ == "__main__":
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
     # ================================= toy example ===============================
-    toy_option = True
+    toy_option = False
     if toy_option:
         from shortest_path_utils import load_toy_data as load_data
         from shortest_path_utils import generate_toy_graph as generate_graph
