@@ -90,7 +90,7 @@ if __name__ == "__main__":
         n_nodes = 10
         n_instances = 300
         n_features = 2048
-        p = 0.3 # edge prob
+        p = 0.2 # edge prob
         max_budget  = 5.0
         max_latency = 5.0
         intermediate_size = 512
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     blackbox_option = False
     if not blackbox_option: # precompute
         relaxation = 0.01
-        regularization = 0.01
+        regularization = 0.05
 
         P_inv = (1/relaxation) * np.eye(theta_size)
         Q = np.zeros((1, x_size + lamb_size, x_size + lamb_size))
@@ -197,8 +197,8 @@ if __name__ == "__main__":
         model = copy.deepcopy(model_initial)
         uncertainty_model = copy.deepcopy(uncertainty_model_initial)
 
-        tmp_learning_rate = learning_rate / 100 if robust_option else learning_rate
-        optimizer = optim.Adam(list(model.parameters()) + list(uncertainty_model.parameters()), lr=tmp_learning_rate)
+        # tmp_learning_rate = learning_rate / 100 if robust_option else learning_rate
+        optimizer = optim.Adam(list(model.parameters()) + list(uncertainty_model.parameters()), lr=learning_rate)
 
         for epoch in tqdm.trange(-2, num_epochs): # start from -1 to test original objective value, -2 to test the optimal
             for mode in ["training", "testing"]:
@@ -335,8 +335,8 @@ if __name__ == "__main__":
                     else: # QP direct computation
                         # Q has been precomputed
                         p = torch.cat((torch.zeros(x_size).to(device), torch.Tensor(constraint_matrix).to(device) @ mean[0] + variance[0])).to("cpu")
-                        # qp_solver = qpth.qp.QPFunction(verbose=0) # WARNING: -1 for no verbose
-                        qp_solver = qpthlocal.qp.QPFunction(zhats=None, nus=None, lams=None, slacks=None, verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI)
+                        qp_solver = qpth.qp.QPFunction(verbose=0) # WARNING: -1 for no verbose
+                        # qp_solver = qpthlocal.qp.QPFunction(zhats=None, nus=None, lams=None, slacks=None, verbose=True, solver=qpthlocal.qp.QPSolvers.GUROBI)
                         new_xlamb_opt = qp_solver(Q, p, extended_G, extended_h, extended_A, extended_b)
                         # TODO
 

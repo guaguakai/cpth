@@ -14,7 +14,7 @@ import pickle
 from linear import make_shortest_path_matrix
 
 # Random Seed Initialization
-SEED = 1234 # random.randint(0,10000)
+SEED = random.randint(0,10000)
 print("Random seed: {}".format(SEED))
 torch.manual_seed(SEED)
 np.random.seed(SEED)
@@ -40,7 +40,7 @@ def make_fc(num_features, num_targets, num_layers = 1, intermediate_size = 2048,
         return nn.Sequential(nn.Linear(num_features, num_targets), nn.Sigmoid())
 
 class MeanNet(nn.Module):
-    def __init__(self, n_features, n_targets, intermediate_size = 512):
+    def __init__(self, n_features, n_targets, intermediate_size = 128):
         super(MeanNet, self).__init__()
         self.num_features = n_features # TODO
         self.num_targets = n_targets
@@ -222,8 +222,10 @@ def load_data(args, kwargs, g, latency, n_instances, n_constraints, n_features=5
         for i in range(num_samples):
             for j in range(num_edges):
                 tmp = random.random()
-                if tmp < 0.5: # 50 % high rate
+                if tmp < 0.3: # 50 % high rate
                     c[i,j] = 4 + random.random()
+                elif tmp < 0.8:
+                    c[i,j] = 2 + random.random()
                 else: # 50 % low rate
                     c[i,j] = 0 + 0.5 * random.random()
         return c
